@@ -88,6 +88,7 @@ static void print_help(const char *prog) {
 typedef struct {
     const char *filename;     /* required positional arg */
     const char *dump_inflate; /* --dump-inflate <outfile> */
+    const char *dump_pixels;  /* --dump-pixels <outfile> */
     int         info_only;    /* --info */
     int         width;        /* --width N, 0 = auto */
     int         mode_set;     /* 1 if --mode= was given */
@@ -117,6 +118,14 @@ static int parse_args(int argc, char **argv, cli_args_t *out) {
                 return -1;
             }
             out->dump_inflate = argv[++i];
+            continue;
+        }
+        if (strcmp(a, "--dump-pixels") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "%s: --dump-pixels requires a filename argument\n", prog);
+                return -1;
+            }
+            out->dump_pixels = argv[++i];
             continue;
         }
         if (strcmp(a, "--mode=truecolor") == 0) { out->mode = TERM_MODE_TRUECOLOR; out->mode_set = 1; continue; }
@@ -284,6 +293,27 @@ int main(int argc, char **argv) {
                 png_unfilter_status_str(ustatus));
         png_container_free(&container);
         return 1;
+    }
+
+    if (args.dump_pixels) {
+        FILE *f = fopen(args.dump_pixels, "wb");
+        if (!f) {
+            fprintf(stderr, "%s: %s: failed to open pixel dump file '%s'\n",
+                    prog, args.filename, args.dump_pixels);
+            png_pixels_free(&pixels);
+            png_container_free(&container);
+            return 1;
+        }
+        size_t total_bytes = (size_t)pixels.width * (size_t)pixels.height * (size_t)pixels.bytes_per_pixel;
+        if (fwrite(pixels.pixels, 1, total_bytes, f) != total_bytes) {
+            fprintf(stderr, "%s: %s: failed to write all pixel bytes to '%s'\n",
+                    prog, args.filename, args.dump_pixels);
+            fclose(f);
+            png_pixels_free(&pixels);
+            png_container_free(&container);
+            return 1;
+        }
+        fclose(f);
     }
 
     /* ----------------------------------------------------------------
