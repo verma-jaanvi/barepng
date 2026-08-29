@@ -34,11 +34,14 @@ two image rows per terminal cell, foreground + background color.
 Requires GCC (MinGW on Windows, or any C11 compiler). No other dependencies.
 
 ```bash
-make           # build imgview binary
-make check     # run all 43 unit tests
+make           # build pngdecoder binary
+make check     # run all 45 unit tests
 make test      # decode and render all demo PNGs + aspect-ratio regression check
-make fuzz      # 34-case malformed-input gauntlet
+make fuzz      # 51-case malformed-input gauntlet
+make memcheck  # zero-leak memory verification across all valid and error paths
 make analyze   # GCC -fanalyzer static analysis
+make bench     # performance and throughput benchmark
+make regression# full master regression suite across all stages
 ```
 
 **Windows (PowerShell):**
@@ -146,9 +149,9 @@ The unsupported types are good candidates for a follow-on iteration.
 ---
 
 ## Test Suite
-
+ 
 ```
-43 unit tests across 6 test binaries:
+45 unit tests across 6 test binaries:
   test_primitives   — CRC-32, big-endian u32 reader
   test_bitreader    — LSB-first bit extraction, alignment, atomicity
   test_huffman      — canonical code build, decode, edge cases (0/1 symbol)
@@ -156,10 +159,18 @@ The unsupported types are good candidates for a follow-on iteration.
   test_zlib_wrapper — header parse, Adler-32 verify, error paths
   test_unfilter     — all 5 filter types, Paeth predictor, mixed rows, bpp
 
-34 malformed-input cases:
-  truncation at 14 key byte offsets, empty files, bad signature,
-  CRC flips on IHDR/IDAT, IDAT body corruption, bad DEFLATE BTYPE,
-  invalid zlib header, missing IEND — all exit 1, none crash or hang.
+51 committed malformed-input test cases (tests/malformed/):
+  truncation at key byte offsets, empty files, bad signatures,
+  CRC flips on IHDR, integer overflow guards (width/height 0xFFFFFFFF),
+  bad DEFLATE BTYPE, invalid zlib headers, corrupt trees, bad back-refs,
+  missing IEND — all exit 1, none crash or hang.
+
+Multi-layer Ground Truth Verification:
+  make verify-inflate — byte-for-byte match vs Python zlib.decompress()
+  make verify-pixels  — byte-for-byte full-buffer & alpha match vs Pillow
+  make verify-render  — ANSI sequence reconstruction & alpha compositing
+  make memcheck       — zero memory leaks across all valid and error paths
+  make analyze        — zero warnings under GCC -fanalyzer deep static analysis
 ```
 
 ---
@@ -179,9 +190,18 @@ src/
 
 include/            public headers (one per module)
 tests/              unit tests (one .c per binary, no test framework)
+tests/malformed/    51 committed adversarial/corrupt PNG test cases
 tools/
-  gen_corpus.py         generates 9 diverse PNG fixtures for integration tests
-  fuzz_malformed.py     34-case malformed-input gauntlet
+  gen_corpus.py         generates diverse PNG fixtures for integration tests
+  gen_malformed_suite.py generates committed tests/malformed/ test cases
+  fuzz_malformed.py     51-case malformed-input test gauntlet
+  verify_inflate.py     Stage 2a inflate ground truth comparison vs zlib
+  verify_pixels.py      Stage 2b pixel buffer & alpha comparison vs Pillow
+  verify_render.py      Stage 2c ANSI parsing and downscaled/alpha verification
+  verify_memory.py      Stage 4 zero-leak memory verification harness
+  analyze_static.py     Stage 4 GCC -fanalyzer static analysis runner
+  bench_perf.py         Stage 5 latency and throughput benchmark
+  regression_check.py   Stage 6 master automated regression test harness
   check_render_aspect.py  regression check: --width downscale preserves aspect ratio
   render_screenshot.py    regenerates docs/screenshot.png from real program output
 demo/               five reference PNGs (32×32 to 2048×2048, RGB and RGBA)
