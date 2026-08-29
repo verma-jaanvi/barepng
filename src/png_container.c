@@ -226,6 +226,20 @@ png_status_t png_read_container(const char *path, png_container_t *out,
             c.ihdr.interlace_method   = data[12];
             have_ihdr = 1;
 
+            if (c.ihdr.width == 0 || c.ihdr.height == 0) {
+                set_err(errbuf, errbuf_len,
+                        "invalid dimensions in IHDR: width and height must be non-zero");
+                status = PNG_ERR_IHDR_BAD_DIMENSIONS;
+                break;
+            }
+            if (c.ihdr.width > 0x7FFFFFFFu || c.ihdr.height > 0x7FFFFFFFu) {
+                set_err(errbuf, errbuf_len,
+                        "unsupported: image dimensions exceed 2^31-1 (%u x %u)",
+                        c.ihdr.width, c.ihdr.height);
+                status = PNG_ERR_IHDR_BAD_DIMENSIONS;
+                break;
+            }
+
             if (c.ihdr.bit_depth != 8) {
                 set_err(errbuf, errbuf_len,
                         "unsupported: bit depth %u (only 8-bit is supported)",

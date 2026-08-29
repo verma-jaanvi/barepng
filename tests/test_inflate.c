@@ -266,6 +266,20 @@ static void test_bad_stored_len_fails_cleanly(void) {
     printf("test_bad_stored_len_fails_cleanly: PASS\n");
 }
 
+static void test_bad_backref_fails_cleanly(void) {
+    /* Fixed Huffman block starting immediately with a backreference (symbol 257,
+     * dist 1) before any literal bytes exist in the output buffer. Must fail cleanly
+     * with INFLATE_ERR_BAD_BACKREF rather than read unallocated/out-of-bounds memory.
+     * BFINAL=1, BTYPE=01 (3 bits: 011) + sym 257 (7 bits: 0000001) + dist 0 (5 bits: 00000)
+     * Packed: byte 0 = 0x0B, byte 1 = 0x00, byte 2 = 0x00 */
+    uint8_t buf[3] = {0x0b, 0x00, 0x00};
+    inflate_buffer_t out;
+    inflate_status_t status = inflate(buf, sizeof(buf), &out);
+    assert(status == INFLATE_ERR_BAD_BACKREF);
+
+    printf("test_bad_backref_fails_cleanly: PASS\n");
+}
+
 int main(void) {
     test_stored_block();
     test_fixed_huffman_block();
@@ -276,6 +290,7 @@ int main(void) {
     test_dynamic_huffman_block();
     test_dynamic_huffman_truncated_header();
     test_bad_stored_len_fails_cleanly();
+    test_bad_backref_fails_cleanly();
     printf("all inflate tests passed\n");
     return 0;
 }

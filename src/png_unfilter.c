@@ -55,23 +55,33 @@ png_unfilter_status_t png_unfilter(const uint8_t *inflated, size_t inflated_len,
                                     png_pixels_t *out) {
     memset(out, 0, sizeof(*out));
 
+    if (height == 0 || width == 0 || bytes_per_pixel <= 0) {
+        return PNG_UNFILTER_ERR_BAD_INPUT_SIZE;
+    }
+
     /* stride = bytes per row in the pixel buffer (no filter byte) */
-    size_t stride = (size_t)width * (size_t)bytes_per_pixel;
+    size_t stride = 0;
+    if (__builtin_mul_overflow((size_t)width, (size_t)bytes_per_pixel, &stride) ||
+        stride > (size_t)-2) {
+        return PNG_UNFILTER_ERR_BAD_INPUT_SIZE;
+    }
 
     /* Each scanline in the inflated buffer is 1 (filter byte) + stride.
      * The total must match exactly — any mismatch means the inflate output
      * is wrong or the caller passed incorrect dimensions. */
-    size_t expected_len = (size_t)height * (stride + 1);
-    if (inflated_len != expected_len) {
+    size_t scanline_len = stride + 1;
+    size_t expected_len = 0;
+    if (__builtin_mul_overflow((size_t)height, scanline_len, &expected_len) ||
+        inflated_len != expected_len) {
         return PNG_UNFILTER_ERR_BAD_INPUT_SIZE;
     }
 
-    /* Edge case: 0-pixel image is trivially valid and produces no output. */
-    if (height == 0 || width == 0) {
-        return PNG_UNFILTER_OK;
+    size_t pixel_buf_size = 0;
+    if (__builtin_mul_overflow((size_t)height, stride, &pixel_buf_size)) {
+        return PNG_UNFILTER_ERR_OUT_OF_MEMORY;
     }
 
-    uint8_t *pixels = (uint8_t *)malloc((size_t)height * stride);
+    uint8_t *pixels = (uint8_t *)malloc(pixel_buf_size);
     if (!pixels) {
         return PNG_UNFILTER_ERR_OUT_OF_MEMORY;
     }

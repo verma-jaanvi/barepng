@@ -258,8 +258,24 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    size_t expected_size = (size_t)container.ihdr.height *
-                            ((size_t)container.ihdr.width * (size_t)channels + 1);
+    size_t stride = 0;
+    if (__builtin_mul_overflow((size_t)container.ihdr.width, (size_t)channels, &stride) ||
+        stride > (size_t)-2) {
+        fprintf(stderr, "%s: %s: image dimensions too large (overflow)\n",
+                prog, args.filename);
+        inflate_buffer_free(&inflated);
+        png_container_free(&container);
+        return 1;
+    }
+    size_t scanline_len = stride + 1;
+    size_t expected_size = 0;
+    if (__builtin_mul_overflow((size_t)container.ihdr.height, scanline_len, &expected_size)) {
+        fprintf(stderr, "%s: %s: image dimensions too large (overflow)\n",
+                prog, args.filename);
+        inflate_buffer_free(&inflated);
+        png_container_free(&container);
+        return 1;
+    }
     if (inflated.size != expected_size) {
         fprintf(stderr, "%s: %s: inflated size %zu does not match expected %zu\n",
                 prog, args.filename, inflated.size, expected_size);
