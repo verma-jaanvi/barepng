@@ -11,7 +11,7 @@ ifeq ($(OS),Windows_NT)
     BIN      := $(BUILD)/pngdecoder.exe
     HEXDUMP  := tools/hexdump.exe
     MKDIR_P  := powershell -Command "if (!(Test-Path $(BUILD))) { New-Item -ItemType Directory -Path $(BUILD) | Out-Null }"
-    RM_RF    := powershell -Command "Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $(BUILD), $(HEXDUMP)"
+    RM_RF    := powershell -Command "if (Test-Path $(BUILD)) { Remove-Item -Recurse -Force $(BUILD) }; if (Test-Path $(HEXDUMP)) { Remove-Item -Force $(HEXDUMP) }"
     TEST_RUN := powershell -Command "Get-ChildItem demo/*.png | ForEach-Object { Write-Host ('--- ' + $$_.Name + ' ---'); .\$(BIN) $$_.FullName }"
 else
     BIN      := $(BUILD)/pngdecoder
@@ -37,9 +37,17 @@ ifeq ($(OS),Windows_NT)
     UNFILTERTESTBIN := $(BUILD)/test_unfilter.exe
 endif
 
-.PHONY: all clean hexdump test check corpus fuzz analyze
+.PHONY: all clean hexdump test check corpus fuzz analyze debug perf
 
 all: $(BIN) $(HEXDUMP)
+
+# Debug build with sanitizers — for correctness/memory stages
+debug: CFLAGS += -g -O0 -fsanitize=address,undefined -fno-omit-frame-pointer
+debug: $(BIN)
+
+# Optimized build for perf measurement — never profile a debug binary
+perf: CFLAGS += -O3 -DNDEBUG
+perf: $(BIN)
 
 $(BIN): $(OBJ) | $(BUILD)
 	$(CC) $(OBJ) -o $@ $(LDFLAGS)
