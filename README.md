@@ -1,27 +1,26 @@
 # imgview — A PNG Decoder and Terminal Renderer in C
 
-Zero-dependency PNG decoder and terminal image renderer — including a hand-rolled
-DEFLATE decompressor written from the RFC 1951 spec. No libpng. No zlib. No image
-libraries of any kind. The entire decode pipeline — chunk parsing, inflate,
-scanline unfiltering, and terminal rendering — is implemented from scratch in
-~1,700 lines of C.
+Zero-dependency PNG decoder and terminal image renderer in C — including its own
+DEFLATE decompressor, the same compression algorithm behind gzip and zlib, written
+directly from the RFC 1951 spec. No libpng. No zlib. No image libraries of any
+kind. The entire decode pipeline — chunk parsing, inflate, scanline unfiltering,
+and terminal rendering — is implemented from scratch in ~1,700 lines of C.
+
+![imgview rendering a PNG as 24-bit truecolor half-blocks in a terminal](docs/screenshot.png)
+
+*Real captured output — `imgview demo/photo_640x480_rgb.png --width 90` — not a mockup.*
 
 ```
 $ imgview demo/photo_640x480_rgb.png --info
 
+demo/photo_640x480_rgb.png
   dimensions  : 640 x 480
   color type  : RGB (truecolor)
+  bit depth   : 8
+  chunks      : 9
   IDAT stream : 426 KB compressed
   pixel buffer: 900 KB uncompressed
-  decode time : 11.0 ms (inflate + unfilter)
-
-$ imgview demo/photo_640x480_rgb.png --mode=ascii --width 60
-
-                  .................:.:::::::::::::::-:--:---
-                ... .............:..:.::::::::::::::-::-----
-                 ....................:::::::::::::::-:-:----
-            .   ... ...........:..:...:::::::::::-::::-::---
-              . .. . ............:..:.::::::::::::::::------
+  decode time : 16.4 ms (inflate + unfilter)
 ```
 
 On a color terminal the `--mode=truecolor` default renders each image with 24-bit
@@ -37,7 +36,7 @@ Requires GCC (MinGW on Windows, or any C11 compiler). No other dependencies.
 ```bash
 make           # build imgview binary
 make check     # run all 43 unit tests
-make test      # decode and render all demo PNGs
+make test      # decode and render all demo PNGs + aspect-ratio regression check
 make fuzz      # 34-case malformed-input gauntlet
 make analyze   # GCC -fanalyzer static analysis
 ```
@@ -181,10 +180,15 @@ src/
 include/            public headers (one per module)
 tests/              unit tests (one .c per binary, no test framework)
 tools/
-  gen_corpus.py     generates 9 diverse PNG fixtures for integration tests
-  fuzz_malformed.py 34-case malformed-input gauntlet
+  gen_corpus.py         generates 9 diverse PNG fixtures for integration tests
+  fuzz_malformed.py     34-case malformed-input gauntlet
+  check_render_aspect.py  regression check: --width downscale preserves aspect ratio
+  render_screenshot.py    regenerates docs/screenshot.png from real program output
 demo/               five reference PNGs (32×32 to 2048×2048, RGB and RGBA)
 tests/fixtures/     generated corpus (make corpus)
+docs/screenshot.png real captured terminal output, embedded above
+PITCH.md            30-second spoken demo pitch, memorize-and-rehearse
+DEMO_REHEARSAL.md   demo rehearsal log: exact commands, fallback paths verified
 ```
 
 ---

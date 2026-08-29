@@ -12,13 +12,13 @@ Categories:
 """
 import subprocess, struct, zlib, os, sys
 
-DECODER = r"build\pngdecoder.exe"
-REF_PNG = r"demo\icon_32x32_rgb.png"
+DECODER = os.path.join("build", "pngdecoder.exe" if os.name == "nt" else "pngdecoder")
+REF_PNG = os.path.join("demo", "icon_32x32_rgb.png")
 
 with open(REF_PNG, 'rb') as f:
     REF = f.read()
 
-TMPFILE = r"tests\fixtures\malformed_tmp.png"
+TMPFILE = os.path.join("tests", "fixtures", "malformed_tmp.png")
 
 passed = 0
 failed = 0

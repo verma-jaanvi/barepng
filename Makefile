@@ -55,9 +55,12 @@ hexdump: $(HEXDUMP)
 $(HEXDUMP): tools/hexdump.c
 	$(CC) -O2 -Wall -Wextra -o $@ $<
 
-# Quick smoke test: run the decoder against every demo image
+# Quick smoke test: run the decoder against every demo image, then the
+# Phase 7 aspect-ratio regression check (row scaling must track column
+# scaling — see tools/check_render_aspect.py for the bug this catches).
 test: all
 	@$(TEST_RUN)
+	@$(PYTHON) tools/check_render_aspect.py $(BIN)
 
 # Isolated unit tests: read_u32_be/CRC-32 (Phase 1), the bit reader
 # (Phase 2a), canonical Huffman build/decode (Phase 2c), end-to-end

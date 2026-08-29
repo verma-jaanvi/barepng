@@ -259,7 +259,9 @@ void term_render(const png_pixels_t *px, const term_render_opts_t *opts) {
     /* --- compute output dimensions ---
      * Fit image width into available columns (nearest-neighbor).
      * Each terminal column = one pixel column (downscaled).
-     * Each terminal row    = two image rows (half-block). */
+     * Each terminal row    = two image rows (half-block), *at the same
+     * downscale ratio as the columns* — see the row_scale comment below.
+     */
     int max_cols = (opts->max_cols > 0) ? opts->max_cols : 80;
     uint32_t out_cols = (px->width < (uint32_t)max_cols)
                         ? px->width
@@ -269,16 +271,34 @@ void term_render(const png_pixels_t *px, const term_render_opts_t *opts) {
     /* Use fixed-point scaling to avoid float: multiply image coords by
      * SCALE_DENOM before dividing, so we stay in integer arithmetic. */
     uint32_t scale_x = (px->width  << 16) / out_cols; /* 16.16 fixed-point */
-    uint32_t scale_y = 2; /* half-block: each terminal row = 2 image rows */
 
-    uint32_t out_rows = (px->height + 1) / 2; /* ceiling division */
+    /* Bug (caught in Phase 7 demo rehearsal): row_scale used to be a
+     * hardcoded 2 — i.e. "one output row = exactly 2 image rows" no
+     * matter how much the columns were downscaled. That's only correct
+     * when out_cols == px->width (no horizontal downscale). As soon as
+     * --width forces out_cols < px->width, the column step (scale_x)
+     * grows past 1:1 but the row step stayed frozen at 2, so the image
+     * was squashed horizontally relative to its own vertical extent —
+     * e.g. a 640x480 photo capped to 90 columns rendered ~240 output
+     * rows instead of the ~34 needed to keep it looking like a photo.
+     *
+     * Fix: the row step must shrink/grow by the *same ratio* as the
+     * column step, then the half-block trick's built-in 2x still
+     * applies on top of that ratio (two sampled rows per output row).
+     */
+    uint32_t row_scale = 2 * scale_x; /* 16.16 fixed-point, image rows per output row */
+    uint32_t out_rows = (uint32_t)(((uint64_t)px->height << 16) + row_scale - 1) / row_scale; /* ceil */
+    if (out_rows == 0) out_rows = 1;
 
     uint8_t bg_r = opts->bg_r, bg_g = opts->bg_g, bg_b = opts->bg_b;
 
     for (uint32_t yt = 0; yt < out_rows; yt++) {
-        uint32_t img_row_top = yt * scale_y;
-        uint32_t img_row_bot = img_row_top + 1;
-        /* clamp bottom row for odd-height images */
+        /* Sample two representative rows within this output row's span
+         * (quarter and three-quarter position), the same nearest-neighbor
+         * idea already used for columns below. */
+        uint32_t img_row_top = (uint32_t)(((uint64_t)yt * row_scale + (row_scale >> 2)) >> 16);
+        uint32_t img_row_bot = (uint32_t)(((uint64_t)yt * row_scale + ((uint64_t)row_scale * 3 >> 2)) >> 16);
+        if (img_row_top >= px->height) img_row_top = px->height - 1;
         if (img_row_bot >= px->height) img_row_bot = px->height - 1;
 
         for (uint32_t xt = 0; xt < out_cols; xt++) {
