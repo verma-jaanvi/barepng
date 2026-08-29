@@ -6,6 +6,8 @@ SRC      := $(wildcard src/*.c)
 OBJ      := $(patsubst src/%.c,$(BUILD)/%.o,$(SRC))
 
 ifeq ($(OS),Windows_NT)
+    # Full path to Python — avoids picking up MSYS2's stub which lacks PIL
+    PYTHON   := C:/Users/JAANVI/AppData/Local/Programs/Python/Python311/python.exe
     BIN      := $(BUILD)/pngdecoder.exe
     HEXDUMP  := tools/hexdump.exe
     MKDIR_P  := powershell -Command "if (!(Test-Path $(BUILD))) { New-Item -ItemType Directory -Path $(BUILD) | Out-Null }"
@@ -17,6 +19,7 @@ else
     MKDIR_P  := mkdir -p $(BUILD)
     RM_RF    := rm -rf $(BUILD) $(HEXDUMP)
     TEST_RUN := for f in demo/*.png; do echo "--- $$f ---"; ./$(BIN) $$f; done
+    PYTHON   := python3
 endif
 
 TESTBIN := $(BUILD)/test_primitives
@@ -24,15 +27,17 @@ BITTESTBIN := $(BUILD)/test_bitreader
 HUFFTESTBIN := $(BUILD)/test_huffman
 INFLATETESTBIN := $(BUILD)/test_inflate
 ZLIBTESTBIN := $(BUILD)/test_zlib_wrapper
+UNFILTERTESTBIN := $(BUILD)/test_unfilter
 ifeq ($(OS),Windows_NT)
     TESTBIN := $(BUILD)/test_primitives.exe
     BITTESTBIN := $(BUILD)/test_bitreader.exe
     HUFFTESTBIN := $(BUILD)/test_huffman.exe
     INFLATETESTBIN := $(BUILD)/test_inflate.exe
     ZLIBTESTBIN := $(BUILD)/test_zlib_wrapper.exe
+    UNFILTERTESTBIN := $(BUILD)/test_unfilter.exe
 endif
 
-.PHONY: all clean hexdump test check
+.PHONY: all clean hexdump test check corpus fuzz analyze
 
 all: $(BIN) $(HEXDUMP)
 
@@ -56,16 +61,17 @@ test: all
 
 # Isolated unit tests: read_u32_be/CRC-32 (Phase 1), the bit reader
 # (Phase 2a), canonical Huffman build/decode (Phase 2c), end-to-end
-# inflate() against real DEFLATE fixtures (Phase 2b/2c/2d), and the
-# RFC 1950 zlib wrapper (Phase 2e). Each layer's tests assume the layer
-# below it is already correct — run this whole target, in order, before
-# trusting anything new built on top.
-check: $(TESTBIN) $(BITTESTBIN) $(HUFFTESTBIN) $(INFLATETESTBIN) $(ZLIBTESTBIN)
+# inflate() against real DEFLATE fixtures (Phase 2b/2c/2d), the
+# RFC 1950 zlib wrapper (Phase 2e), and PNG scanline unfiltering (Phase 3).
+# Each layer's tests assume the layer below it is already correct — run
+# this whole target, in order, before trusting anything new built on top.
+check: $(TESTBIN) $(BITTESTBIN) $(HUFFTESTBIN) $(INFLATETESTBIN) $(ZLIBTESTBIN) $(UNFILTERTESTBIN)
 	@./$(TESTBIN)
 	@./$(BITTESTBIN)
 	@./$(HUFFTESTBIN)
 	@./$(INFLATETESTBIN)
 	@./$(ZLIBTESTBIN)
+	@./$(UNFILTERTESTBIN)
 
 $(TESTBIN): tests/test_primitives.c $(BUILD)/png_container.o | $(BUILD)
 	$(CC) $(CFLAGS) tests/test_primitives.c $(BUILD)/png_container.o -o $@
@@ -81,6 +87,23 @@ $(INFLATETESTBIN): tests/test_inflate.c $(BUILD)/inflate.o $(BUILD)/huffman.o $(
 
 $(ZLIBTESTBIN): tests/test_zlib_wrapper.c $(BUILD)/zlib_wrapper.o | $(BUILD)
 	$(CC) $(CFLAGS) tests/test_zlib_wrapper.c $(BUILD)/zlib_wrapper.o -o $@
+
+$(UNFILTERTESTBIN): tests/test_unfilter.c $(BUILD)/png_unfilter.o | $(BUILD)
+	$(CC) $(CFLAGS) tests/test_unfilter.c $(BUILD)/png_unfilter.o -o $@
+
+# Phase 6: generate diverse PNG corpus from Python (requires Pillow)
+corpus: all
+	$(PYTHON) tools/gen_corpus.py
+
+# Phase 6: malformed-input gauntlet — every case must exit 1, no crashes
+fuzz: all corpus
+	$(PYTHON) tools/fuzz_malformed.py
+
+# Phase 6: GCC static analysis across every source file
+analyze:
+	@for f in $(SRC); do \
+	    $(CC) -fanalyzer $(CFLAGS) -c $$f -o /dev/null 2>&1 | grep -E 'warning|error' && echo "  $$f: issues" || echo "  $$f: OK"; \
+	done
 
 clean:
 	@$(RM_RF)
