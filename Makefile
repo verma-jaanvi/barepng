@@ -37,7 +37,7 @@ ifeq ($(OS),Windows_NT)
     UNFILTERTESTBIN := $(BUILD)/test_unfilter.exe
 endif
 
-.PHONY: all clean hexdump test check corpus fuzz analyze debug perf
+.PHONY: all clean hexdump test check corpus fuzz analyze debug perf verify-inflate
 
 all: $(BIN) $(HEXDUMP)
 
@@ -109,6 +109,10 @@ corpus: all
 # Phase 6: malformed-input gauntlet — every case must exit 1, no crashes
 fuzz: all corpus
 	$(PYTHON) tools/fuzz_malformed.py
+
+# Stage 2a: verify inflate output against Python zlib ground truth
+verify-inflate: all corpus
+	$(PYTHON) tools/verify_inflate.py $(BIN)
 
 # Phase 6: GCC static analysis across every source file
 analyze:

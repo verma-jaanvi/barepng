@@ -86,10 +86,11 @@ static void print_help(const char *prog) {
  * --------------------------------------------------------------------- */
 
 typedef struct {
-    const char *filename;   /* required positional arg */
-    int         info_only;  /* --info */
-    int         width;      /* --width N, 0 = auto */
-    int         mode_set;   /* 1 if --mode= was given */
+    const char *filename;     /* required positional arg */
+    const char *dump_inflate; /* --dump-inflate <outfile> */
+    int         info_only;    /* --info */
+    int         width;        /* --width N, 0 = auto */
+    int         mode_set;     /* 1 if --mode= was given */
     term_mode_t mode;
     int         help;
 } cli_args_t;
@@ -108,6 +109,14 @@ static int parse_args(int argc, char **argv, cli_args_t *out) {
         }
         if (strcmp(a, "--info") == 0) {
             out->info_only = 1;
+            continue;
+        }
+        if (strcmp(a, "--dump-inflate") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "%s: --dump-inflate requires a filename argument\n", prog);
+                return -1;
+            }
+            out->dump_inflate = argv[++i];
             continue;
         }
         if (strcmp(a, "--mode=truecolor") == 0) { out->mode = TERM_MODE_TRUECOLOR; out->mode_set = 1; continue; }
@@ -237,6 +246,26 @@ int main(int argc, char **argv) {
         inflate_buffer_free(&inflated);
         png_container_free(&container);
         return 1;
+    }
+
+    if (args.dump_inflate) {
+        FILE *f = fopen(args.dump_inflate, "wb");
+        if (!f) {
+            fprintf(stderr, "%s: %s: failed to open dump file '%s'\n",
+                    prog, args.filename, args.dump_inflate);
+            inflate_buffer_free(&inflated);
+            png_container_free(&container);
+            return 1;
+        }
+        if (fwrite(inflated.data, 1, inflated.size, f) != inflated.size) {
+            fprintf(stderr, "%s: %s: failed to write all bytes to '%s'\n",
+                    prog, args.filename, args.dump_inflate);
+            fclose(f);
+            inflate_buffer_free(&inflated);
+            png_container_free(&container);
+            return 1;
+        }
+        fclose(f);
     }
 
     /* ----------------------------------------------------------------

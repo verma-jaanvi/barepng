@@ -2,3 +2,5 @@ build/
 tools/hexdump
 tools/hexdump.exe
 *.exe
+__pycache__/
+
