@@ -28,6 +28,7 @@ HUFFTESTBIN := $(BUILD)/test_huffman
 INFLATETESTBIN := $(BUILD)/test_inflate
 ZLIBTESTBIN := $(BUILD)/test_zlib_wrapper
 UNFILTERTESTBIN := $(BUILD)/test_unfilter
+MEMCHECKBIN     := $(BUILD)/test_memcheck
 ifeq ($(OS),Windows_NT)
     TESTBIN := $(BUILD)/test_primitives.exe
     BITTESTBIN := $(BUILD)/test_bitreader.exe
@@ -35,9 +36,10 @@ ifeq ($(OS),Windows_NT)
     INFLATETESTBIN := $(BUILD)/test_inflate.exe
     ZLIBTESTBIN := $(BUILD)/test_zlib_wrapper.exe
     UNFILTERTESTBIN := $(BUILD)/test_unfilter.exe
+    MEMCHECKBIN     := $(BUILD)/test_memcheck.exe
 endif
 
-.PHONY: all clean hexdump test check corpus fuzz analyze debug perf verify-inflate verify-pixels verify-render
+.PHONY: all clean hexdump test check corpus fuzz analyze debug perf verify-inflate verify-pixels verify-render memcheck
 
 all: $(BIN) $(HEXDUMP)
 
@@ -102,6 +104,9 @@ $(ZLIBTESTBIN): tests/test_zlib_wrapper.c $(BUILD)/zlib_wrapper.o | $(BUILD)
 $(UNFILTERTESTBIN): tests/test_unfilter.c $(BUILD)/png_unfilter.o | $(BUILD)
 	$(CC) $(CFLAGS) tests/test_unfilter.c $(BUILD)/png_unfilter.o -o $@
 
+$(MEMCHECKBIN): tests/test_memcheck.c $(BUILD)/png_container.o $(BUILD)/zlib_wrapper.o $(BUILD)/inflate.o $(BUILD)/huffman.o $(BUILD)/bit_reader.o $(BUILD)/png_unfilter.o | $(BUILD)
+	$(CC) $(CFLAGS) tests/test_memcheck.c $(BUILD)/png_container.o $(BUILD)/zlib_wrapper.o $(BUILD)/inflate.o $(BUILD)/huffman.o $(BUILD)/bit_reader.o $(BUILD)/png_unfilter.o -o $@ "-Wl,--wrap=malloc" "-Wl,--wrap=calloc" "-Wl,--wrap=realloc" "-Wl,--wrap=free"
+
 # Phase 6: generate diverse PNG corpus from Python (requires Pillow)
 corpus: all
 	$(PYTHON) tools/gen_corpus.py
@@ -122,11 +127,13 @@ verify-pixels: all corpus
 verify-render: all corpus
 	$(PYTHON) tools/verify_render.py $(BIN)
 
-# Phase 6: GCC static analysis across every source file
+# Stage 4: memory correctness & zero-leak verification across corpus and error paths
+memcheck: $(MEMCHECKBIN) corpus
+	$(PYTHON) tools/verify_memory.py
+
+# Phase 6 / Stage 4: GCC static analysis across every source file
 analyze:
-	@for f in $(SRC); do \
-	    $(CC) -fanalyzer $(CFLAGS) -c $$f -o /dev/null 2>&1 | grep -E 'warning|error' && echo "  $$f: issues" || echo "  $$f: OK"; \
-	done
+	$(PYTHON) tools/analyze_static.py
 
 clean:
 	@$(RM_RF)

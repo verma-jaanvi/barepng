@@ -81,7 +81,7 @@ png_unfilter_status_t png_unfilter(const uint8_t *inflated, size_t inflated_len,
         return PNG_UNFILTER_ERR_OUT_OF_MEMORY;
     }
 
-    uint8_t *pixels = (uint8_t *)malloc(pixel_buf_size);
+    uint8_t *pixels = (uint8_t *)calloc(1, pixel_buf_size);
     if (!pixels) {
         return PNG_UNFILTER_ERR_OUT_OF_MEMORY;
     }
