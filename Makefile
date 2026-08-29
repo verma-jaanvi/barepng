@@ -39,7 +39,7 @@ ifeq ($(OS),Windows_NT)
     MEMCHECKBIN     := $(BUILD)/test_memcheck.exe
 endif
 
-.PHONY: all clean hexdump test check corpus fuzz analyze debug perf verify-inflate verify-pixels verify-render memcheck
+.PHONY: all clean hexdump test check corpus fuzz analyze debug perf verify-inflate verify-pixels verify-render memcheck bench
 
 all: $(BIN) $(HEXDUMP)
 
@@ -130,6 +130,10 @@ verify-render: all corpus
 # Stage 4: memory correctness & zero-leak verification across corpus and error paths
 memcheck: $(MEMCHECKBIN) corpus
 	$(PYTHON) tools/verify_memory.py
+
+# Stage 5: performance benchmark on large demo images
+bench: perf
+	$(PYTHON) tools/bench_perf.py $(BIN)
 
 # Phase 6 / Stage 4: GCC static analysis across every source file
 analyze:
