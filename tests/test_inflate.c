@@ -270,9 +270,13 @@ static void test_bad_backref_fails_cleanly(void) {
     /* Fixed Huffman block starting immediately with a backreference (symbol 257,
      * dist 1) before any literal bytes exist in the output buffer. Must fail cleanly
      * with INFLATE_ERR_BAD_BACKREF rather than read unallocated/out-of-bounds memory.
-     * BFINAL=1, BTYPE=01 (3 bits: 011) + sym 257 (7 bits: 0000001) + dist 0 (5 bits: 00000)
-     * Packed: byte 0 = 0x0B, byte 1 = 0x00, byte 2 = 0x00 */
-    uint8_t buf[3] = {0x0b, 0x00, 0x00};
+     * BFINAL=1, BTYPE=01 (bits 0..2: 011)
+     * sym 257 = code 0000001 (bits 3..9: 0000001)
+     * dist 0  = code 00000 (bits 10..14: 00000)
+     * Byte 0: 0b00000011 = 0x03
+     * Byte 1: 0b00000010 = 0x02
+     * Byte 2: 0x00 */
+    uint8_t buf[3] = {0x03, 0x02, 0x00};
     inflate_buffer_t out;
     inflate_status_t status = inflate(buf, sizeof(buf), &out);
     assert(status == INFLATE_ERR_BAD_BACKREF);

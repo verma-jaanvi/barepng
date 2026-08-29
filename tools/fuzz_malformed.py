@@ -232,14 +232,9 @@ run_test(make_png(4, 4, idat_payload=bad_dyn_hdr), "DEFLATE: corrupt dynamic Huf
 
 # LZ77 backreference before start of decoded output
 # Construct fixed Huffman block that immediately emits distance code with 0 decoded bytes
-# In fixed tree: symbol 257 (len 3), followed by distance 0 (dist 1), but output buffer size is 0!
-# Symbol 257 in fixed tree is 0000001 (7 bits) -> bit pattern: 0x01.
-# Dist 0 (5 bits 00000) -> 0x00.
-# BFINAL=1, BTYPE=01 (fixed) -> 3 bits: 011 -> 0x03.
-# Bit stream: 011 (fixed hdr) + 0000001 (len 257) + 00000 (dist 1)
-# 011 | (0000001 << 3) = 011 | 00001000 = 0x0B
-# next bits: 000000 (rest of sym 257) + 00000 (dist) -> 0x00
-bad_backref_deflate = valid_zhdr + b'\x0b\x00\x00\x00' + b'\x00'*4
+# BFINAL=1, BTYPE=01 (bits 0..2: 011), sym 257 (bits 3..9: 0000001), dist 0 (bits 10..14: 00000)
+# Byte 0 = 0x03, Byte 1 = 0x02, Byte 2 = 0x00
+bad_backref_deflate = valid_zhdr + b'\x03\x02\x00\x00' + b'\x00'*4
 run_test(make_png(4, 4, idat_payload=bad_backref_deflate), "DEFLATE: LZ77 backreference before start of output")
 
 # Adler-32 trailer mismatch

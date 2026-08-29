@@ -39,7 +39,7 @@ ifeq ($(OS),Windows_NT)
     MEMCHECKBIN     := $(BUILD)/test_memcheck.exe
 endif
 
-.PHONY: all clean hexdump test check corpus fuzz analyze debug perf verify-inflate verify-pixels verify-render memcheck bench
+.PHONY: all clean hexdump test check corpus fuzz analyze debug perf verify-inflate verify-pixels verify-render memcheck bench regression
 
 all: $(BIN) $(HEXDUMP)
 
@@ -138,6 +138,10 @@ bench: perf
 # Phase 6 / Stage 4: GCC static analysis across every source file
 analyze:
 	$(PYTHON) tools/analyze_static.py
+
+# Stage 6: master regression test harness across all stages
+regression:
+	$(PYTHON) tools/regression_check.py
 
 clean:
 	@$(RM_RF)
