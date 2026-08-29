@@ -146,6 +146,17 @@ static int parse_args(int argc, char **argv, cli_args_t *out) {
             out->width = (int)v;
             continue;
         }
+        if (strncmp(a, "--width=", 8) == 0) {
+            const char *val = a + 8;
+            char *end;
+            long v = strtol(val, &end, 10);
+            if (*end != '\0' || v <= 0 || v > 65535) {
+                fprintf(stderr, "%s: --width: invalid value '%s' (must be 1-65535)\n", prog, val);
+                return -1;
+            }
+            out->width = (int)v;
+            continue;
+        }
 
         /* Anything starting with '--' that we didn't recognise is an error. */
         if (a[0] == '-' && a[1] == '-') {

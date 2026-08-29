@@ -37,7 +37,7 @@ ifeq ($(OS),Windows_NT)
     UNFILTERTESTBIN := $(BUILD)/test_unfilter.exe
 endif
 
-.PHONY: all clean hexdump test check corpus fuzz analyze debug perf verify-inflate verify-pixels
+.PHONY: all clean hexdump test check corpus fuzz analyze debug perf verify-inflate verify-pixels verify-render
 
 all: $(BIN) $(HEXDUMP)
 
@@ -117,6 +117,10 @@ verify-inflate: all corpus
 # Stage 2b: verify unfilter pixel output against Pillow ground truth
 verify-pixels: all corpus
 	$(PYTHON) tools/verify_pixels.py $(BIN)
+
+# Stage 2c: verify ANSI rendering, downsampling, and alpha compositing
+verify-render: all corpus
+	$(PYTHON) tools/verify_render.py $(BIN)
 
 # Phase 6: GCC static analysis across every source file
 analyze:
