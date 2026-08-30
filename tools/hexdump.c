@@ -1,11 +1,3 @@
-/* hexdump.c - minimal hex+ASCII dumper for eyeballing PNG chunk boundaries.
- *
- * Usage: hexdump <file> [start] [length]
- *
- * This is deliberately dumb: no dependencies, no PNG awareness. The point
- * is to have a tool you trust completely (because it's ~60 lines) before
- * you start trusting a parser you just wrote.
- */
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -22,7 +14,7 @@ int main(int argc, char **argv) {
     }
 
     long start = (argc > 2) ? strtol(argv[2], NULL, 0) : 0;
-    long want_len = (argc > 3) ? strtol(argv[3], NULL, 0) : -1; /* -1 = to EOF */
+    long want_len = (argc > 3) ? strtol(argv[3], NULL, 0) : -1;
 
     if (fseek(f, start, SEEK_SET) != 0) {
         perror("fseek");

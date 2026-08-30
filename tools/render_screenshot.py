@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""Render imgview's real ANSI truecolor output into a terminal-window PNG.
-
-This is not a mockup: it parses the actual escape sequences imgview emits
-(38;2;r;g;b foreground, 48;2;r;g;b background, U+2580 half-block) and paints
-each cell as a real pixel block, then wraps it in a plain terminal chrome
-(title dots + a prompt line) so the README screenshot reflects the true
-program output rather than a hand-drawn approximation.
-"""
+"""Render terminal output into PNG screenshot."""
 import re
 import sys
 from PIL import Image, ImageDraw, ImageFont

@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-"""
-Stage 2c: Rendered Output (Phase 4) Verification.
-1. Decodes ANSI truecolor sequences emitted by pngdecoder back into an RGB pixel grid.
-2. Compares reconstructed grid against reference downsampled & composited pixels.
-3. Tests full resolution and downscaling (--width).
-4. Verifies alpha compositing on transparent, opaque, and gradient RGBA pixels.
-"""
+"""Verify ANSI escape code rendering output."""
 import os
 import re
 import sys

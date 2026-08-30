@@ -1,10 +1,3 @@
-/* test_memcheck.c - Stage 4: Memory allocation tracking and leak detection.
- *
- * Runs decode twice on each file: the first run initializes any one-time CRT
- * static structures (e.g. MSVCRT file handles); the second run measures
- * EXACT delta of allocated bytes across the entire decode pipeline.
- * Asserts net allocated delta is EXACTLY 0 bytes (zero leaks).
- */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -118,17 +111,21 @@ static int run_decode_cycle(const char *path) {
         return 1;
     }
 
-    size_t stride = 0;
-    if (__builtin_mul_overflow((size_t)container.ihdr.width, (size_t)channels, &stride) ||
-        stride > (size_t)-2) {
+    if ((size_t)channels == 0 ||
+        (size_t)container.ihdr.width > SIZE_MAX / (size_t)channels) {
         inflate_buffer_free(&inflated);
         png_container_free(&container);
         return 1;
     }
+    size_t stride = (size_t)container.ihdr.width * (size_t)channels;
     size_t scanline_len = stride + 1;
-    size_t expected_size = 0;
-    if (__builtin_mul_overflow((size_t)container.ihdr.height, scanline_len, &expected_size) ||
-        inflated.size != expected_size) {
+    if ((size_t)container.ihdr.height > SIZE_MAX / scanline_len) {
+        inflate_buffer_free(&inflated);
+        png_container_free(&container);
+        return 1;
+    }
+    size_t expected_size = (size_t)container.ihdr.height * scanline_len;
+    if (inflated.size != expected_size) {
         inflate_buffer_free(&inflated);
         png_container_free(&container);
         return 1;
@@ -157,7 +154,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    /* Pass 1: warm up any CRT internal allocations for this path */
+    /* Pass 1: warm up CRT internal allocations */
     run_decode_cycle(argv[1]);
 
     /* Pass 2: track exact delta */
@@ -166,7 +163,7 @@ int main(int argc, char **argv) {
     size_t bytes_after = g_current_allocated_bytes;
 
     if (bytes_after != bytes_before) {
-        fprintf(stderr, "MEMORY LEAK DETECTED in %s: %lld bytes leaked (before: %zu, after: %zu)\n",
+        fprintf(stderr, "Memory leak in %s: %lld bytes leaked (before: %zu, after: %zu)\n",
                 argv[1], (long long)(bytes_after - bytes_before), bytes_before, bytes_after);
         return 2;
     }

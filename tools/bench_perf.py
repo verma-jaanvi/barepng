@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""
-Stage 5: Benchmark & Performance Measurement Suite.
-Profiles decode latency, memory footprint, and uncompressed throughput (MB/s).
-Tests warm-cache and multi-run averages on demo images.
-"""
+"""Benchmark decode latency and throughput."""
 import os
 import sys
 import glob

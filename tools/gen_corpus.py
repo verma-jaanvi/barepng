@@ -1,15 +1,6 @@
 #!/usr/bin/env python3
-"""
-Phase 6: PNG corpus generator.
-Creates test PNGs covering diverse encoder configurations:
-  - different compression levels (0=none, 1=fast, 6=default, 9=best)
-  - all 5 filter types applied explicitly (forced via row-by-row encoding)
-  - multi-IDAT (fragmented) stream
-  - large solid blocks (RLE-friendly for encoder)
-  - gradient (high entropy, forces dynamic Huffman + Paeth filters)
-  - RGBA with varying alpha
-Each file is also verified round-trip through Pillow to confirm it's valid.
-"""
+"""PNG test corpus generator."""
+
 import struct, zlib, random, os
 from PIL import Image
 

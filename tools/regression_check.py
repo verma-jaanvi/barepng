@@ -1,16 +1,5 @@
 #!/usr/bin/env python3
-"""
-Stage 6: Master Automated Regression Harness.
-Runs the complete battery of tests across every layer:
-  1. Zero-warning clean rebuild (all, check)
-  2. Corpus & demo image decoding (exit 0)
-  3. Inflate output byte-for-byte verification vs zlib (Stage 2a)
-  4. Pixel buffer byte-for-byte verification vs Pillow (Stage 2b)
-  5. Rendered ANSI reconstruction, downsampling, & alpha compositing (Stage 2c)
-  6. Rejection of committed adversarial/malformed suite tests/malformed/*.png (Stage 3)
-  7. Memory correctness & zero-leak verification across all paths (Stage 4)
-  8. Static analysis with GCC -fanalyzer (Phase 6)
-"""
+"""Automated master regression test runner."""
 import glob
 import os
 import subprocess

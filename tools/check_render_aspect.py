@@ -1,18 +1,4 @@
-"""
-Phase 7 regression check: term_render.c used to hardcode row_scale=2,
-so downscaling --width without also downscaling rows produced a badly
-distorted (vertically stretched) render for any width < image width.
-Fixed by scaling rows at the same ratio as columns (see term_render.c).
-
-This isn't a unit test of term_render's internals (it has no return
-value to assert on directly, only stdout side effects) - it's a
-black-box check against the built binary, run the same way the demo
-itself will be run, so it catches the exact failure mode a judge would
-see live.
-
-Usage: python3 tools/check_render_aspect.py [path-to-binary]
-Exit 0 on pass, 1 on any mismatch.
-"""
+"""Verify terminal render aspect ratio scaling."""
 import subprocess
 import sys
 import os

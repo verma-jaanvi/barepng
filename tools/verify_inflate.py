@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""
-Stage 2a: Ground-truth Inflate Output Verification.
-Extracts concatenated IDAT chunks from PNG files, decompresses with Python's zlib,
-and compares byte-for-byte against pngdecoder's --dump-inflate output.
-"""
+"""Verify DEFLATE inflate output against Python zlib."""
 import os
 import sys
 import glob

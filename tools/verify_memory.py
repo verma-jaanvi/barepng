@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-"""
-Stage 4: Automated Memory Correctness & Leak Verification Harness.
-Executes test_memcheck across:
-  1. All valid corpus and demo PNG files.
-  2. All 51 adversarial/malformed/truncated inputs from Stage 3.
-Guarantees 0 memory leaks, 0 double-frees, and 0 memory corruptions on all execution and error paths.
-"""
+"""Run memory leak verification tests."""
 import glob
 import os
 import struct

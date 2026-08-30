@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-"""
-Generates the committed tests/malformed/ directory containing all 51 adversarial
-test cases for reproducible offline testing.
-"""
+"""Generate committed malformed PNG test cases."""
 import os
 import sys
 import zlib

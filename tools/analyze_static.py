@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""
-Stage 4 / Phase 6: GCC -fanalyzer static analysis runner.
-Runs GCC's deep static analyzer across all source files and reports warnings/errors.
-Checks for memory leaks, use-after-free, double-free, out-of-bounds, uninitialized memory.
-"""
+"""GCC -fanalyzer static analysis runner."""
 import glob
 import os
 import subprocess

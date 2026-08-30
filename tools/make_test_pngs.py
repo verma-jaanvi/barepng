@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""
-Generate the demo/ test PNG set.
-
-All images are forced to 8-bit depth, non-interlaced, and either
-truecolor (RGB) or truecolor+alpha (RGBA) - matching the locked scope
-in SCOPE.md. Pillow's default PNG writer already does 8-bit/no-interlace
-for these modes, but we double check after writing.
-"""
+"""Generate demo test PNG files."""
 import os
 import random
 import struct

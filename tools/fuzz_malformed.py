@@ -1,45 +1,6 @@
 #!/usr/bin/env python3
-"""
-Stage 3: Comprehensive Adversarial / Malformed Input Test Suite.
-Tests that the decoder produces a clean error message and exit code 1 for every
-malformed, adversarial, truncated, or corrupt input - never a crash, hang, or segfault.
+"""Adversarial and malformed input test harness."""
 
-Layer Coverage:
-  1. CLI & File System:
-     - Zero-byte file
-     - 4-byte partial signature
-     - Arbitrary binary / non-PNG formats (JPEG, ELF, ASCII text)
-  2. Container (Phase 1):
-     - Truncation at every structural boundary
-     - IHDR width=0, height=0
-     - IHDR width=0xFFFFFFFF, height=0xFFFFFFFF (integer overflow guard)
-     - IHDR width=0x80000000 (> 2^31-1 per spec)
-     - Unsupported bit depth (16-bit, 1-bit, 4-bit)
-     - Unsupported color type (0 grayscale, 3 palette, 4 grayscale+alpha)
-     - Unsupported compression/filter/interlace (Adam7) methods
-     - IHDR bad chunk length
-     - IHDR and IDAT CRC flips
-     - Missing IHDR, IDAT before IHDR, missing IDAT, missing IEND
-     - Unrecognized critical chunks
-  3. Zlib Wrapper (Phase 2e):
-     - Bad compression method (CM != 8)
-     - Bad header check bits (FCHECK)
-     - Preset dictionary set (FDICT=1)
-     - Adler-32 mismatch in trailer
-  4. Inflate / DEFLATE (Phase 2b/2c/2d):
-     - Truncate mid-DEFLATE block
-     - Reserved BTYPE (11)
-     - BFINAL never set before EOF
-     - Stored block LEN/NLEN mismatch
-     - Dynamic Huffman header corruption (HLIT/HDIST/HCLEN)
-     - Dynamic Huffman invalid code length repeat sequences (code 16 before length, repeat overflow)
-     - Oversubscribed / incomplete dynamic Huffman trees
-     - LZ77 backreference before start of decoded output (distance > size)
-     - Illegal distance codes (codes 30/31)
-  5. Scanline Unfilter (Phase 3):
-     - Invalid filter type bytes (5, 200, 255)
-     - Truncated / mis-sized inflated scanline buffer
-"""
 import os
 import sys
 import zlib

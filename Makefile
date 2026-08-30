@@ -6,8 +6,6 @@ SRC      := $(wildcard src/*.c)
 OBJ      := $(patsubst src/%.c,$(BUILD)/%.o,$(SRC))
 
 ifeq ($(OS),Windows_NT)
-    # Prefer the full Python path to avoid MSYS2's stub (which lacks PIL).
-    # Falls back to bare 'python' so this Makefile works on any Windows machine.
     _PYTHON_FULL := C:/Users/JAANVI/AppData/Local/Programs/Python/Python311/python.exe
     ifeq ($(wildcard $(_PYTHON_FULL)),$(_PYTHON_FULL))
         PYTHON := $(_PYTHON_FULL)
@@ -51,18 +49,12 @@ endif
 
 all: $(BIN) $(HEXDUMP)
 
-# Debug build with sanitizers — for correctness/memory stages
 debug: CFLAGS += -g -O0 -fsanitize=address,undefined -fno-omit-frame-pointer
 debug: $(BIN)
 
-# Optimized build for perf measurement — never profile a debug binary
 perf: CFLAGS += -O3 -DNDEBUG
 perf: $(BIN)
 
-# Reproducible build variant — pins flags that can introduce non-determinism.
-# -frandom-seed=0: makes GCC's symbol-name generation deterministic (GCC only).
-# -fdebug-prefix-map=.: strips absolute build paths from debug info.
-# Run tools/verify_reproducible.sh to confirm byte-identical output.
 REPRO_CFLAGS := $(CFLAGS) -frandom-seed=0 -fdebug-prefix-map=$(CURDIR)=.
 repro: $(OBJ) | $(BUILD)
 	$(CC) $(REPRO_CFLAGS) $(OBJ) -o $(BIN) $(LDFLAGS)
@@ -81,19 +73,10 @@ hexdump: $(HEXDUMP)
 $(HEXDUMP): tools/hexdump.c
 	$(CC) -O2 -Wall -Wextra -o $@ $<
 
-# Quick smoke test: run the decoder against every demo image, then the
-# Phase 7 aspect-ratio regression check (row scaling must track column
-# scaling — see tools/check_render_aspect.py for the bug this catches).
 test: all
 	@$(TEST_RUN)
 	@$(PYTHON) tools/check_render_aspect.py $(BIN)
 
-# Isolated unit tests: read_u32_be/CRC-32 (Phase 1), the bit reader
-# (Phase 2a), canonical Huffman build/decode (Phase 2c), end-to-end
-# inflate() against real DEFLATE fixtures (Phase 2b/2c/2d), the
-# RFC 1950 zlib wrapper (Phase 2e), and PNG scanline unfiltering (Phase 3).
-# Each layer's tests assume the layer below it is already correct — run
-# this whole target, in order, before trusting anything new built on top.
 check: $(TESTBIN) $(BITTESTBIN) $(HUFFTESTBIN) $(INFLATETESTBIN) $(ZLIBTESTBIN) $(UNFILTERTESTBIN)
 	@./$(TESTBIN)
 	@./$(BITTESTBIN)
@@ -123,45 +106,33 @@ $(UNFILTERTESTBIN): tests/test_unfilter.c $(BUILD)/png_unfilter.o | $(BUILD)
 $(MEMCHECKBIN): tests/test_memcheck.c $(BUILD)/png_container.o $(BUILD)/zlib_wrapper.o $(BUILD)/inflate.o $(BUILD)/huffman.o $(BUILD)/bit_reader.o $(BUILD)/png_unfilter.o | $(BUILD)
 	$(CC) $(CFLAGS) tests/test_memcheck.c $(BUILD)/png_container.o $(BUILD)/zlib_wrapper.o $(BUILD)/inflate.o $(BUILD)/huffman.o $(BUILD)/bit_reader.o $(BUILD)/png_unfilter.o -o $@ "-Wl,--wrap=malloc" "-Wl,--wrap=calloc" "-Wl,--wrap=realloc" "-Wl,--wrap=free"
 
-# Phase 6: generate diverse PNG corpus from Python (requires Pillow)
 corpus: all
 	$(PYTHON) tools/gen_corpus.py
 
-# Phase 6: malformed-input gauntlet — every case must exit 1, no crashes
 fuzz: all corpus
 	$(PYTHON) tools/fuzz_malformed.py
 
-# Stage 2a: verify inflate output against Python zlib ground truth
 verify-inflate: all corpus
 	$(PYTHON) tools/verify_inflate.py $(BIN)
 
-# Stage 2b: verify unfilter pixel output against Pillow ground truth
 verify-pixels: all corpus
 	$(PYTHON) tools/verify_pixels.py $(BIN)
 
-# Stage 2c: verify ANSI rendering, downsampling, and alpha compositing
 verify-render: all corpus
 	$(PYTHON) tools/verify_render.py $(BIN)
 
-# Stage 4: memory correctness & zero-leak verification across corpus and error paths
 memcheck: $(MEMCHECKBIN) corpus
 	$(PYTHON) tools/verify_memory.py
 
-# Stage 5: performance benchmark on large demo images
 bench: perf
 	$(PYTHON) tools/bench_perf.py $(BIN)
 
-# Phase 6 / Stage 4: GCC static analysis across every source file
 analyze:
 	$(PYTHON) tools/analyze_static.py
 
-# Stage 6: master regression test harness across all stages
 regression:
 	$(PYTHON) tools/regression_check.py
 
-# Single-file amalgamation build — all sources concatenated into one TU.
-# Alongside (not replacing) the normal modular build.
-# See tools/amalgamate.py for how the merge is done.
 single: $(BUILD)
 	$(PYTHON) tools/amalgamate.py > $(BUILD)/imgview_single.c
 	$(CC) $(CFLAGS) $(BUILD)/imgview_single.c -o $(SINGLE_BIN)

@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""
-Stage 2b: Ground-Truth Pixel Buffer Verification.
-Extracts ground truth raw pixels from Pillow (RGB/RGBA),
-and compares byte-for-byte against pngdecoder's --dump-pixels output.
-Performs full-buffer diff, spot-checks corners/center, and validates alpha channel.
-"""
+"""Verify pixel buffer output against Pillow."""
 import os
 import sys
 import glob

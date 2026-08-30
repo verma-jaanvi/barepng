@@ -1,25 +1,9 @@
-/* test_inflate.c - end-to-end inflate() tests for Phase 2b (stored
- * blocks) and Phase 2c (fixed Huffman + LZ77 backreferences).
- *
- * All DEFLATE fixtures below were generated externally with Python's
- * zlib module (raw deflate, negative wbits, no zlib wrapper) and their
- * expected decompressed output recorded at generation time - per the
- * plan, zlib is a fixture-generation tool for this test file only and
- * is never linked into the decoder binary (see Makefile: this test
- * links only inflate.o/huffman.o/bit_reader.o).
- */
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
 #include "inflate.h"
 
-/* Fixtures generated externally via Python zlib (compressobj with
- * negative wbits for raw DEFLATE, no zlib wrapper) - zlib only
- * *generates* these fixtures at development time; it is never linked
- * into the decoder binary itself. Each fixture's round-trip against
- * zlib.decompress was verified at generation time. */
-
-/* BFINAL=1, BTYPE=00 (stored). Decompresses to 'AB' x10. */
+/* Stored block fixture (BFINAL=1, BTYPE=00) */
 static const uint8_t FIXTURE_STORED[] = {
     0x01, 0x14, 0x00, 0xeb, 0xff, 0x41, 0x42, 0x41, 0x42, 0x41, 0x42, 0x41,
     0x42, 0x41, 0x42, 0x41, 0x42, 0x41, 0x42, 0x41, 0x42, 0x41, 0x42, 0x41,
@@ -28,7 +12,7 @@ static const uint8_t FIXTURE_STORED[] = {
 static const size_t FIXTURE_STORED_LEN = sizeof(FIXTURE_STORED);
 static const char *FIXTURE_STORED_EXPECTED = "ABABABABABABABABABAB";
 
-/* BFINAL=1, BTYPE=01 (fixed Huffman). Mixed literals + backrefs. */
+/* Fixed Huffman fixture (BFINAL=1, BTYPE=01) */
 static const uint8_t FIXTURE_FIXED[] = {
     0x2b, 0xc9, 0x48, 0x55, 0x28, 0x2c, 0xcd, 0x4c, 0xce, 0x56, 0x48, 0x2a,
     0xca, 0x2f, 0xcf, 0x53, 0x48, 0xcb, 0xaf, 0x50, 0xc8, 0x2a, 0xcd, 0x2d,
@@ -39,15 +23,15 @@ static const uint8_t FIXTURE_FIXED[] = {
 static const size_t FIXTURE_FIXED_LEN = sizeof(FIXTURE_FIXED);
 static const char *FIXTURE_FIXED_EXPECTED = "the quick brown fox jumps over the lazy dog. the quick brown fox jumps again!";
 
-/* BFINAL=1, BTYPE=01. Forces a length-258 backref (LZ77 max length, length code 285, 0 extra bits). */
+/* Length-258 back-reference test */
 static const uint8_t FIXTURE_FIXED_RUN[] = {
     0x4b, 0x4c, 0x1c, 0x05, 0xc4, 0x02, 0x00,
 };
 static const size_t FIXTURE_FIXED_RUN_LEN = sizeof(FIXTURE_FIXED_RUN);
 static const size_t FIXTURE_FIXED_RUN_EXPECTED_LEN = 300;
-static const uint8_t FIXTURE_FIXED_RUN_EXPECTED_BYTE = 0x61; /* 'a' */
+static const uint8_t FIXTURE_FIXED_RUN_EXPECTED_BYTE = 0x61;
 
-/* BFINAL=1, BTYPE=01. Forces a large-distance backref (>4096, exercises high distance-extra-bits codes). */
+/* Large distance back-reference test (>4096 distance) */
 static const uint8_t FIXTURE_FIXED_DIST[] = {
     0x63, 0x60, 0x64, 0x62, 0x66, 0x61, 0x65, 0x63, 0xe7, 0xe0, 0xe4, 0xe2,
     0xe6, 0xe1, 0xe5, 0xe3, 0x17, 0x10, 0x14, 0x12, 0x16, 0x11, 0x15, 0x13,
@@ -103,12 +87,6 @@ static void test_fixed_huffman_block(void) {
     printf("test_fixed_huffman_block: PASS\n");
 }
 
-/* 300 repeated 'a' bytes compresses (at level 6) to just a handful of
- * bytes almost entirely via length-258 backrefs (LZ77's maximum single
- * match length, length code 285, which carries 0 extra bits) - this
- * specifically exercises the top edge of the length table and the
- * "backref length can exceed backref distance" (distance=1 here) path,
- * which requires the byte-by-byte overlap-safe copy rather than memcpy. */
 static void test_fixed_huffman_max_length_run(void) {
     inflate_buffer_t out;
     inflate_status_t status = inflate(FIXTURE_FIXED_RUN, FIXTURE_FIXED_RUN_LEN, &out);
@@ -122,22 +100,13 @@ static void test_fixed_huffman_max_length_run(void) {
     printf("test_fixed_huffman_max_length_run: PASS\n");
 }
 
-/* A 1024-byte chunk repeated after 5000 bytes of filler forces a
- * backreference with distance > 4096, exercising the higher-order
- * distance-extra-bits codes (the low codes only cover distances up to a
- * few hundred). */
 static void test_fixed_huffman_large_distance(void) {
     inflate_buffer_t out;
     inflate_status_t status = inflate(FIXTURE_FIXED_DIST, FIXTURE_FIXED_DIST_LEN, &out);
     assert(status == INFLATE_OK);
     assert(out.size == FIXTURE_FIXED_DIST_EXPECTED_LEN);
 
-    /* the two 1024-byte chunk copies (bytes 0-255 repeated 4x) must be
-     * byte-for-byte identical, since the second is reconstructed purely
-     * from a backreference to the first */
     assert(memcmp(out.data, out.data + out.size - 1024, 1024) == 0);
-    /* and the 256-byte sub-pattern within the first chunk must itself be
-     * correct raw literal data */
     for (int i = 0; i < 256; i++) {
         assert(out.data[i] == (uint8_t)i);
     }
@@ -147,12 +116,7 @@ static void test_fixed_huffman_large_distance(void) {
     printf("test_fixed_huffman_large_distance: PASS\n");
 }
 
-/* Dynamic Huffman fixture (BFINAL=1, BTYPE=10). Random but repetitive
- * word sequence, generated externally via Python zlib with default
- * strategy (not Z_FIXED) specifically so zlib chooses dynamic Huffman
- * -- confirmed by checking the block header byte at generation time --
- * and sized/varied enough that the code-length encoding exercises
- * repeat codes 16/17/18, not just literal 0-15 lengths. */
+/* Dynamic Huffman block test fixture (BFINAL=1, BTYPE=10) */
 static const uint8_t FIXTURE_DYNAMIC[] = {
     0x7d, 0x55, 0x4b, 0x76, 0xc2, 0x30, 0x0c, 0xbc, 0x4a, 0x6e, 0xc1, 0x79,
     0x52, 0x12, 0x0a, 0xaf, 0x90, 0xf6, 0xb5, 0x61, 0x41, 0x4f, 0x5f, 0x6c,
@@ -200,10 +164,8 @@ static const size_t FIXTURE_DYNAMIC_EXPECTED_LEN = 2515;
 static const char *FIXTURE_DYNAMIC_EXPECTED =
     "deflate png lz77 inflate inflate huffman deflate byte deflate decode stream png png deflate inflate inflate byte decode png byte inflate byte stream inflate bit decode lz77 png huffman stream chunk lz77 huffman inflate chunk deflate deflate stream deflate chunk chunk decode lz77 png bit byte deflate stream deflate byte lz77 decode chunk decode inflate deflate png inflate lz77 deflate inflate deflate stream lz77 bit chunk huffman chunk chunk inflate lz77 deflate decode huffman byte inflate huffman bit stream lz77 byte inflate chunk png inflate png chunk stream lz77 deflate inflate decode chunk inflate bit stream bit huffman lz77 huffman inflate byte byte lz77 decode stream decode stream chunk inflate huffman byte bit deflate png deflate huffman huffman stream decode deflate stream stream decode bit byte lz77 byte png deflate byte lz77 chunk deflate lz77 stream huffman bit png lz77 byte huffman byte deflate lz77 byte decode inflate huffman chunk huffman byte byte png decode chunk bit png deflate chunk lz77 inflate png inflate decode deflate deflate bit deflate byte huffman huffman bit byte huffman lz77 byte decode stream inflate byte inflate lz77 stream chunk bit byte bit deflate inflate inflate deflate chunk png decode byte inflate decode inflate png deflate png inflate deflate png chunk deflate byte inflate lz77 bit inflate byte huffman decode decode bit inflate bit stream inflate deflate deflate stream chunk stream stream bit png deflate png stream chunk deflate inflate inflate inflate byte bit huffman stream huffman lz77 bit inflate deflate bit byte deflate png byte png deflate inflate huffman stream bit bit inflate stream png huffman stream png stream lz77 bit lz77 stream byte bit huffman inflate lz77 inflate png decode byte png chunk png png decode bit byte byte huffman png byte deflate huffman deflate decode deflate inflate stream deflate decode inflate decode decode png decode deflate stream decode decode byte chunk lz77 inflate chunk inflate lz77 stream huffman lz77 bit chunk deflate png bit decode decode deflate deflate byte inflate byte lz77 huffman chunk deflate inflate chunk lz77 huffman bit byte lz77 decode byte png byte lz77 deflate huffman lz77 deflate deflate byte huffman lz77 lz77 decode inflate chunk inflate lz77 byte bit lz77 png deflate stream lz77 png png chunk huffman lz77 huffman bit byte stream byte png deflate deflate huffman byte png chunk decode byte huffman stream huffman png lz77 chunk png chunk inflate inflate deflate chunk byte stream decode";
 
-/* --- error-path tests: hand-corrupted/short inputs, not zlib-generated --- */
-
 static void test_truncated_stream_fails_cleanly(void) {
-    uint8_t buf[1] = {0x01}; /* BFINAL=1, BTYPE=00 (stored), then nothing */
+    uint8_t buf[1] = {0x01};
     inflate_buffer_t out;
     inflate_status_t status = inflate(buf, sizeof(buf), &out);
     assert(status == INFLATE_ERR_TRUNCATED);
@@ -214,7 +176,6 @@ static void test_truncated_stream_fails_cleanly(void) {
 }
 
 static void test_reserved_btype_fails_cleanly(void) {
-    /* BFINAL=1 (bit0=1), BTYPE=11 (bits1-2=11) -> first byte 0x07 */
     uint8_t buf[1] = {0x07};
     inflate_buffer_t out;
     inflate_status_t status = inflate(buf, sizeof(buf), &out);
@@ -223,15 +184,6 @@ static void test_reserved_btype_fails_cleanly(void) {
     printf("test_reserved_btype_fails_cleanly: PASS\n");
 }
 
-/* Real dynamic Huffman block (Phase 2d): 400 randomly-chosen repeated
- * words, generated with zlib's default strategy specifically so it
- * picks BTYPE=10 rather than fixed Huffman (confirmed at generation
- * time by inspecting the block header byte). Repetitive-but-varied text
- * like this is exactly the shape that makes zlib's code-length encoder
- * reach for repeat codes 16/17/18, not just literal 0-15 values, so a
- * correct byte-for-byte match here exercises the whole HLIT/HDIST/HCLEN
- * parse and the repeat-code logic, not just the "happy path" of a
- * trivial one-symbol tree. */
 static void test_dynamic_huffman_block(void) {
     inflate_buffer_t out;
     inflate_status_t status = inflate(FIXTURE_DYNAMIC, FIXTURE_DYNAMIC_LEN, &out);
@@ -243,11 +195,8 @@ static void test_dynamic_huffman_block(void) {
     printf("test_dynamic_huffman_block: PASS\n");
 }
 
-/* BFINAL=1, BTYPE=10, but the stream is cut off immediately after the
- * BTYPE bits - before even HLIT/HDIST/HCLEN can be read. Must fail
- * cleanly with INFLATE_ERR_TRUNCATED, not read past the buffer. */
 static void test_dynamic_huffman_truncated_header(void) {
-    uint8_t buf[1] = {0x05}; /* BFINAL=1, BTYPE=10, then nothing */
+    uint8_t buf[1] = {0x05};
     inflate_buffer_t out;
     inflate_status_t status = inflate(buf, sizeof(buf), &out);
     assert(status == INFLATE_ERR_TRUNCATED);
@@ -256,8 +205,6 @@ static void test_dynamic_huffman_truncated_header(void) {
 }
 
 static void test_bad_stored_len_fails_cleanly(void) {
-    /* BFINAL=1, BTYPE=00, then LEN=0x0005 but NLEN is NOT its one's
-     * complement (should be 0xFFFA, we give 0x0000) */
     uint8_t buf[5] = {0x01, 0x05, 0x00, 0x00, 0x00};
     inflate_buffer_t out;
     inflate_status_t status = inflate(buf, sizeof(buf), &out);
@@ -267,15 +214,6 @@ static void test_bad_stored_len_fails_cleanly(void) {
 }
 
 static void test_bad_backref_fails_cleanly(void) {
-    /* Fixed Huffman block starting immediately with a backreference (symbol 257,
-     * dist 1) before any literal bytes exist in the output buffer. Must fail cleanly
-     * with INFLATE_ERR_BAD_BACKREF rather than read unallocated/out-of-bounds memory.
-     * BFINAL=1, BTYPE=01 (bits 0..2: 011)
-     * sym 257 = code 0000001 (bits 3..9: 0000001)
-     * dist 0  = code 00000 (bits 10..14: 00000)
-     * Byte 0: 0b00000011 = 0x03
-     * Byte 1: 0b00000010 = 0x02
-     * Byte 2: 0x00 */
     uint8_t buf[3] = {0x03, 0x02, 0x00};
     inflate_buffer_t out;
     inflate_status_t status = inflate(buf, sizeof(buf), &out);

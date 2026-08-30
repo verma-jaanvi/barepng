@@ -1,17 +1,9 @@
-/* test_zlib_wrapper.c - isolated tests for RFC 1950 header/trailer
- * handling. Reference values (header bytes, Adler-32) cross-checked
- * against Python's own zlib.compress()/zlib.adler32() output, not
- * derived from this C code.
- */
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
 #include "zlib_wrapper.h"
 
-/* zlib.compress(b'the quick brown fox jumps over the lazy dog' * 3),
- * default settings - generated and captured directly from Python's
- * zlib module, not hand-transcribed. Header 0x78 0x9c, trailer
- * (Adler-32) independently confirmed as 0x30b42fec. */
+/* Captured zlib stream for "the quick brown fox jumps over the lazy dog" * 3 */
 static const uint8_t REAL_ZLIB_STREAM[] = {
     0x78, 0x9c, 0x2b, 0xc9, 0x48, 0x55, 0x28, 0x2c, 0xcd, 0x4c, 0xce, 0x56,
     0x48, 0x2a, 0xca, 0x2f, 0xcf, 0x53, 0x48, 0xcb, 0xaf, 0x50, 0xc8, 0x2a,
@@ -65,12 +57,8 @@ static void test_check_adler32_detects_mismatch(void) {
 }
 
 static void test_bad_compression_method_rejected(void) {
-    /* CMF low nibble = 0 (not 8/deflate). FLG=0x03 independently verified
-     * (Python) to satisfy (CMF<<8|FLG) % 31 == 0 with FDICT unset, so
-     * this isolates the compression-method check specifically rather
-     * than tripping the check-bits or FDICT checks instead. */
     uint8_t buf[6] = {0x70, 0x03, 0, 0, 0, 0};
-    assert(((0x70u << 8 | 0x03u) % 31u) == 0); /* sanity-check our own fixture */
+    assert(((0x70u << 8 | 0x03u) % 31u) == 0);
 
     const uint8_t *deflate_start;
     size_t deflate_len;
@@ -82,8 +70,7 @@ static void test_bad_compression_method_rejected(void) {
 }
 
 static void test_bad_check_bits_rejected(void) {
-    /* CM=8 (valid), but FLG chosen so (CMF<<8|FLG) % 31 != 0 */
-    uint8_t buf[6] = {0x78, 0x00, 0, 0, 0, 0}; /* (0x78<<8|0x00) % 31 != 0 */
+    uint8_t buf[6] = {0x78, 0x00, 0, 0, 0, 0};
     assert(((0x78u << 8 | 0x00u) % 31u) != 0);
 
     const uint8_t *deflate_start;
@@ -95,8 +82,6 @@ static void test_bad_check_bits_rejected(void) {
     printf("test_bad_check_bits_rejected: PASS\n");
 }
 
-/* CMF=0x78, FLG=0x20: independently verified (Python) to satisfy the
- * check-bits equation while also having the FDICT bit (0x20) set. */
 static void test_preset_dictionary_rejected(void) {
     uint8_t buf[6] = {0x78, 0x20, 0, 0, 0, 0};
     assert(((0x78u << 8 | 0x20u) % 31u) == 0);
@@ -111,7 +96,7 @@ static void test_preset_dictionary_rejected(void) {
 }
 
 static void test_too_short_rejected(void) {
-    uint8_t buf[5] = {0x78, 0x9c, 0, 0, 0}; /* one byte short of the 6-byte minimum */
+    uint8_t buf[5] = {0x78, 0x9c, 0, 0, 0};
     const uint8_t *deflate_start;
     size_t deflate_len;
     zlib_wrapper_status_t status =
