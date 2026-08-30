@@ -1,4 +1,4 @@
-/* test_zlib_wrapper.c — isolated tests for RFC 1950 header/trailer
+/* test_zlib_wrapper.c - isolated tests for RFC 1950 header/trailer
  * handling. Reference values (header bytes, Adler-32) cross-checked
  * against Python's own zlib.compress()/zlib.adler32() output, not
  * derived from this C code.
@@ -9,7 +9,7 @@
 #include "zlib_wrapper.h"
 
 /* zlib.compress(b'the quick brown fox jumps over the lazy dog' * 3),
- * default settings — generated and captured directly from Python's
+ * default settings - generated and captured directly from Python's
  * zlib module, not hand-transcribed. Header 0x78 0x9c, trailer
  * (Adler-32) independently confirmed as 0x30b42fec. */
 static const uint8_t REAL_ZLIB_STREAM[] = {

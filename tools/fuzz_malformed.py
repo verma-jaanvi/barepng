@@ -2,7 +2,7 @@
 """
 Stage 3: Comprehensive Adversarial / Malformed Input Test Suite.
 Tests that the decoder produces a clean error message and exit code 1 for every
-malformed, adversarial, truncated, or corrupt input — never a crash, hang, or segfault.
+malformed, adversarial, truncated, or corrupt input - never a crash, hang, or segfault.
 
 Layer Coverage:
   1. CLI & File System:

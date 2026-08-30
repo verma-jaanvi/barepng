@@ -1,11 +1,4 @@
-/* bit_reader.c — Phase 2a: LSB-first bit reader.
- *
- * Deliberately the smallest possible thing that could work: no lookahead
- * buffer, no caching multiple bits at once. Huffman decode (2c/2d) will
- * want something faster, but correctness here is what everything else in
- * Phase 2 depends on — get it right and simple first, optimize later if
- * profiling in Phase 6 says so.
- */
+/* LSB-first bit reader implementation. */
 #include "bit_reader.h"
 
 #include <string.h>
@@ -19,11 +12,10 @@ void bitreader_init(bit_reader_t *br, const uint8_t *data, size_t len) {
 
 int bitreader_read_bit(bit_reader_t *br, unsigned *out_bit) {
     if (br->byte_pos >= br->len) {
-        return -1; /* out of data — caller treats this as truncated stream */
+        return -1;
     }
 
     unsigned bit = (br->data[br->byte_pos] >> br->bit_pos) & 1u;
-
     br->bit_pos++;
     if (br->bit_pos == 8) {
         br->bit_pos = 0;
@@ -43,9 +35,7 @@ int bitreader_read_bits(bit_reader_t *br, int n, uint32_t *out) {
         return 0;
     }
 
-    /* Snapshot position so a mid-read failure is fully rolled back —
-     * callers should never have to reason about a partially-consumed
-     * read on the error path. */
+    /* Save state for atomic rollback on failure */
     size_t save_byte = br->byte_pos;
     int save_bit = br->bit_pos;
 
@@ -57,8 +47,6 @@ int bitreader_read_bits(bit_reader_t *br, int n, uint32_t *out) {
             br->bit_pos = save_bit;
             return -1;
         }
-        /* First bit read is the least-significant bit of the result —
-         * this is the DEFLATE packing convention, see bit_reader.h. */
         value |= ((uint32_t)bit) << i;
     }
 
@@ -82,10 +70,7 @@ size_t bitreader_bytes_remaining(const bit_reader_t *br) {
 }
 
 int bitreader_read_raw_bytes(bit_reader_t *br, uint8_t *dst, size_t len) {
-    if (br->bit_pos != 0) {
-        return -1; /* caller forgot to align_to_byte() first */
-    }
-    if (len > bitreader_bytes_remaining(br)) {
+    if (br->bit_pos != 0 || len > bitreader_bytes_remaining(br)) {
         return -1;
     }
     memcpy(dst, br->data + br->byte_pos, len);

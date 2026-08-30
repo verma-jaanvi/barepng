@@ -1,4 +1,4 @@
-/* test_unfilter.c — unit tests for Phase 3: png_unfilter().
+/* test_unfilter.c - unit tests for Phase 3: png_unfilter().
  *
  * Every test builds a synthetic "inflated" buffer by hand (filter-type
  * byte + filtered pixel bytes per scanline) and asserts that png_unfilter()
@@ -325,7 +325,7 @@ static void test_rgb_vs_rgba_bpp(void) {
         0x50, 0x70, 0x90,          /* pixel 1: +pixel0 */
     };
 
-    /* bpp=4: 1 pixel, stride=4 — first 4 bytes all at boundary, no accumulation */
+    /* bpp=4: 1 pixel, stride=4 - first 4 bytes all at boundary, no accumulation */
     uint8_t inflated_rgba[5] = {
         0x01,  /* Sub */
         0x10, 0x20, 0x30, 0x40,
@@ -358,7 +358,7 @@ static void test_rgb_vs_rgba_bpp(void) {
  *     p = 4+6-5 = 5
  *     pa = |5-4| = 1
  *     pb = |5-6| = 1   <- tie: pa==pb, so a wins
- *     pc = |5-5| = 0   <- but pc < pa, so neither a nor b wins — paeth=c
+ *     pc = |5-5| = 0   <- but pc < pa, so neither a nor b wins - paeth=c
  *   Let's find a genuine tie where a wins: a=5, b=7, c=4:
  *     p = 5+7-4 = 8
  *     pa = |8-5| = 3
@@ -381,7 +381,7 @@ static void test_rgb_vs_rgba_bpp(void) {
  * which already confirms correctness. Document the tie-break rule in the
  * function comment; a separate micro-test of the predictor internals would
  * require exposing paeth_predictor(), which we deliberately keep static.
- * Skip this as a separate test — covered implicitly by test_paeth_filter's
+ * Skip this as a separate test - covered implicitly by test_paeth_filter's
  * known-good reference values.
  * --------------------------------------------------------------------- */
 

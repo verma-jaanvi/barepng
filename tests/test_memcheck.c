@@ -1,4 +1,4 @@
-/* test_memcheck.c — Stage 4: Memory allocation tracking and leak detection.
+/* test_memcheck.c - Stage 4: Memory allocation tracking and leak detection.
  *
  * Runs decode twice on each file: the first run initializes any one-time CRT
  * static structures (e.g. MSVCRT file handles); the second run measures
@@ -166,8 +166,8 @@ int main(int argc, char **argv) {
     size_t bytes_after = g_current_allocated_bytes;
 
     if (bytes_after != bytes_before) {
-        fprintf(stderr, "MEMORY LEAK DETECTED in %s: %zd bytes leaked (before: %zu, after: %zu)\n",
-                argv[1], (ssize_t)(bytes_after - bytes_before), bytes_before, bytes_after);
+        fprintf(stderr, "MEMORY LEAK DETECTED in %s: %lld bytes leaked (before: %zu, after: %zu)\n",
+                argv[1], (long long)(bytes_after - bytes_before), bytes_before, bytes_after);
         return 2;
     }
 

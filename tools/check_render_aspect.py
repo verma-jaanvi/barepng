@@ -5,7 +5,7 @@ distorted (vertically stretched) render for any width < image width.
 Fixed by scaling rows at the same ratio as columns (see term_render.c).
 
 This isn't a unit test of term_render's internals (it has no return
-value to assert on directly, only stdout side effects) — it's a
+value to assert on directly, only stdout side effects) - it's a
 black-box check against the built binary, run the same way the demo
 itself will be run, so it catches the exact failure mode a judge would
 see live.
@@ -45,7 +45,7 @@ def main() -> int:
         print(f"{status}: {path} --width {req_width} -> {rows} rows (expected {expected})")
 
     if failed:
-        print(f"\n{failed} case(s) failed — row scaling does not match column scaling.")
+        print(f"\n{failed} case(s) failed - row scaling does not match column scaling.")
         return 1
     print(f"\nAll {len(CASES)} aspect-ratio cases passed.")
     return 0

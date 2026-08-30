@@ -1,6 +1,6 @@
-/* test_primitives.c — isolated tests for the two Phase 1 primitives that
+/* test_primitives.c - isolated tests for the two Phase 1 primitives that
  * are easy to get subtly wrong: the big-endian u32 reader and CRC-32.
- * No framework, no dependencies — just asserts, per project philosophy.
+ * No framework, no dependencies - just asserts, per project philosophy.
  */
 #include <assert.h>
 #include <stdio.h>
@@ -36,7 +36,7 @@ static void test_crc32(void) {
     assert(png_crc32(NULL, 0) == 0x00000000u);
 
     /* Sanity: an IEND chunk (type, no data) has a fixed, well-known CRC
-     * because it never varies — good regression anchor. */
+     * because it never varies - good regression anchor. */
     const uint8_t iend_type[4] = {'I', 'E', 'N', 'D'};
     uint32_t iend_crc = png_crc32(iend_type, 4);
     assert(iend_crc == 0xAE426082u);

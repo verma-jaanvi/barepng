@@ -1,4 +1,4 @@
-/* hexdump.c — minimal hex+ASCII dumper for eyeballing PNG chunk boundaries.
+/* hexdump.c - minimal hex+ASCII dumper for eyeballing PNG chunk boundaries.
  *
  * Usage: hexdump <file> [start] [length]
  *

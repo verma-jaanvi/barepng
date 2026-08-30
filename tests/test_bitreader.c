@@ -1,7 +1,7 @@
-/* test_bitreader.c — isolated tests for the Phase 2a bit reader, checked
+/* test_bitreader.c - isolated tests for the Phase 2a bit reader, checked
  * against hand-constructed byte patterns (values cross-checked with an
  * independent Python script, not just derived from the same C logic
- * being tested — see comments below for the reasoning).
+ * being tested - see comments below for the reasoning).
  */
 #include <assert.h>
 #include <stdio.h>
@@ -54,7 +54,7 @@ static void test_read_bits_within_byte(void) {
 /* Cross-byte read: {0xA1, 0x3C}, read 12 bits in one call. Expected value
  * 0xCA1 (3233 decimal) was computed independently in Python by packing
  * each byte's bits LSB-first and OR-ing bit i into position i of the
- * result — the same definition as the header's contract, derived
+ * result - the same definition as the header's contract, derived
  * separately from this C implementation so the test can't just be
  * confirming its own logic. This also confirms the reader correctly
  * advances byte_pos/bit_pos across the boundary rather than only working
@@ -137,7 +137,7 @@ static void test_bytes_remaining(void) {
 
     assert(bitreader_read_bit(&br, &bit) == 0); /* 1 bit into byte 1 */
     /* byte_pos only advances once bit_pos wraps past 7, so 1 bit into
-     * byte 1 still leaves byte_pos == 1 — bytes_remaining is coarse by
+     * byte 1 still leaves byte_pos == 1 - bytes_remaining is coarse by
      * design (counts from byte_pos, ignores a partially-read byte), so
      * this is still "2" here, not "1". */
     assert(bitreader_bytes_remaining(&br) == 2);

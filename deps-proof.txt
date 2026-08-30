@@ -1,0 +1,52 @@
+================================================================================
+ZERO DEPENDENCY VERIFICATION PROOF: imgview
+================================================================================
+
+1. SOURCE CODE HEADER INSPECTION (src/ and include/):
+--------------------------------------------------------------------------------
+Command: grep -rhE '^#include\s*<.*>' src/ include/ | sort -u
+Result: Only standard C library and POSIX/Win32 OS headers are included.
+
+  <errno.h>        : C standard library
+  <io.h>           : C runtime / POSIX compatibility
+  <stdarg.h>       : C standard library
+  <stddef.h>       : C standard library
+  <stdint.h>       : C standard library
+  <stdio.h>        : C standard library
+  <stdlib.h>       : C standard library
+  <string.h>       : C standard library
+  <sys/ioctl.h>    : POSIX terminal window size (Linux/macOS)
+  <time.h>         : C standard library
+  <unistd.h>       : POSIX system interface (Linux/macOS)
+  <windows.h>      : Win32 console VT mode setup (Windows)
+
+Third-party headers (zlib.h, png.h, etc.): ZERO matches.
+
+2. BINARY IMPORT TABLE / DYNAMIC LINK INSPECTION:
+--------------------------------------------------------------------------------
+Binary: build/pngdecoder.exe (and build/imgview_single.exe)
+Command: objdump -p build/pngdecoder.exe | grep "DLL Name"
+
+Imported Dynamic Libraries:
+  DLL Name: KERNEL32.dll
+  DLL Name: api-ms-win-crt-convert-l1-1-0.dll
+  DLL Name: api-ms-win-crt-environment-l1-1-0.dll
+  DLL Name: api-ms-win-crt-heap-l1-1-0.dll
+  DLL Name: api-ms-win-crt-locale-l1-1-0.dll
+  DLL Name: api-ms-win-crt-math-l1-1-0.dll
+  DLL Name: api-ms-win-crt-private-l1-1-0.dll
+  DLL Name: api-ms-win-crt-runtime-l1-1-0.dll
+  DLL Name: api-ms-win-crt-stdio-l1-1-0.dll
+  DLL Name: api-ms-win-crt-string-l1-1-0.dll
+  DLL Name: api-ms-win-crt-time-l1-1-0.dll
+
+On Linux/POSIX (ldd build/pngdecoder):
+  libc.so.6, libm.so.6 (System C Runtime only)
+
+Third-party shared libraries / DLLs linked: ZERO.
+
+3. BUILD MANIFEST:
+--------------------------------------------------------------------------------
+No external package managers used (no vcpkg, conan, npm, cargo, pip runtime packages).
+Built using standard C11 compiler via Makefile.
+================================================================================

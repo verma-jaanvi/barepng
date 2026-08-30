@@ -1,14 +1,14 @@
-# imgview — A PNG Decoder and Terminal Renderer in C
+# imgview: PNG Decoder and Terminal Renderer in C
 
-Zero-dependency PNG decoder and terminal image renderer in C — including its own
-DEFLATE decompressor, the same compression algorithm behind gzip and zlib, written
-directly from the RFC 1951 spec. No libpng. No zlib. No image libraries of any
-kind. The entire decode pipeline — chunk parsing, inflate, scanline unfiltering,
-and terminal rendering — is implemented from scratch in ~1,700 lines of C.
+Look at a PNG without leaving the terminal. Useful anywhere a GUI is not
+an option or is not worth the round-trip: SSH sessions into headless
+servers, containers, CI build logs, or low-bandwidth connections
+where copying a file locally is more friction than the image is worth.
+Point `imgview` at a file and see it rendered in-place.
 
 ![imgview rendering a PNG as 24-bit truecolor half-blocks in a terminal](docs/screenshot.png)
 
-*Real captured output — `imgview demo/photo_640x480_rgb.png --width 90` — not a mockup.*
+*Real captured output (`imgview demo/photo_640x480_rgb.png --width 90`), not a mockup.*
 
 ```
 $ imgview demo/photo_640x480_rgb.png --info
@@ -24,31 +24,63 @@ demo/photo_640x480_rgb.png
 ```
 
 On a color terminal the `--mode=truecolor` default renders each image with 24-bit
-RGB using the [Unicode half-block character `▀`](https://www.fileformat.info/info/unicode/char/2580/index.htm) —
+RGB using the [Unicode half-block character `▀`](https://www.fileformat.info/info/unicode/char/2580/index.htm):
 two image rows per terminal cell, foreground + background color.
+
+---
+
+## The Pitch: Why Build This When `chafa` and `viu` Exist?
+
+Let's address the obvious question head-on: tools like `chafa`, `viu`, `catimg`,
+and `timg` already do terminal image rendering, and some do it quite well.
+The pitch for `imgview` is not "nobody has ever rendered an image in a terminal before."
+
+The differentiator is how those tools are built versus how `imgview` is built:
+
+* **The Traditional Approach:** Existing tools rely on massive dependency trees.
+  `chafa` links against `glib-2.0`, `libpng`, `libjpeg`, `librsvg`, and `libfreetype`.
+  `viu` pulls in Rust's `image` crate and dozens of transitive dependencies.
+  `catimg` wraps external image libraries.
+* **The Reality on Servers & Containers:** If you are SSH'd into an air-gapped
+  production box, a minimal Alpine/scratch container, an embedded Linux device,
+  or a machine without root access, you cannot `apt install chafa` or compile 50 crates.
+* **The `imgview` Approach:** Zero third-party runtime dependencies. No `libpng`,
+  no `zlib`, no image libraries. Built directly from RFC 1950, RFC 1951, and the
+  PNG ISO spec in ~1,700 lines of standard C11.
+
+It compiles in under half a second with standard `gcc`, can be amalgamated into a
+single `.c` file via `make single`, links strictly to the system standard library,
+and runs anywhere.
 
 ---
 
 ## Build
 
-Requires GCC (MinGW on Windows, or any C11 compiler). No other dependencies.
+Requires GCC and Make. No other dependencies.
 
 ```bash
-make           # build pngdecoder binary
+make           # build imgview binary
 make check     # run all 45 unit tests
-make test      # decode and render all demo PNGs + aspect-ratio regression check
-make fuzz      # 51-case malformed-input gauntlet
+make test      # render all demo PNGs + aspect-ratio regression check
+make fuzz      # 51-case malformed-input gauntlet (requires: make corpus first)
 make memcheck  # zero-leak memory verification across all valid and error paths
 make analyze   # GCC -fanalyzer static analysis
-make bench     # performance and throughput benchmark
-make regression# full master regression suite across all stages
+make bench     # performance benchmark across all demo images
+make regression# full master regression suite
+make single    # single-file amalgamation: all sources -> one .c -> one binary
 ```
 
-**Windows (PowerShell):**
+**Windows (MinGW/MSYS2):**
 ```powershell
 $env:PATH = "C:\msys64\ucrt64\bin;" + $env:PATH
 mingw32-make all
 .\build\pngdecoder.exe demo\photo_640x480_rgb.png
+```
+
+**Linux / macOS:**
+```bash
+make all
+./build/pngdecoder demo/photo_640x480_rgb.png
 ```
 
 ---
@@ -58,8 +90,8 @@ mingw32-make all
 ```
 imgview <file.png> [options]
 
-  --width N              cap render width to N terminal columns
-  --mode=truecolor       force 24-bit RGB (▀ half-blocks)
+  --width N              cap render width to N terminal columns (default: auto)
+  --mode=truecolor       force 24-bit RGB (half-blocks)
   --mode=256             force xterm-256 color palette
   --mode=ascii           force ASCII luminance ramp " .:-=+*#%@"
   --info                 print decode stats only, no render
@@ -82,149 +114,148 @@ Alpha channels (RGBA images) are composited against a mid-gray background
 
 ---
 
-## How It Works
+## How It Works (What Was Implemented)
 
-**1. Chunk parsing** — [`src/png_container.c`](src/png_container.c)
+`imgview` implements the full pipeline from raw bytes to terminal escape codes:
 
-A PNG file is a sequence of length-prefixed chunks, each with a 4-byte type
-tag and a CRC-32 checksum. The parser reads the 8-byte signature, iterates
-chunks in order, verifies every CRC-32 (spec Annex D algorithm), and
-concatenates all `IDAT` payloads into a single buffer. Unsupported chunk types
-in the critical set (`PLTE`, palette-type) are rejected with an explicit error;
-ancillary chunks are skipped by length.
+```
+[PNG File on Disk]
+       │
+       ▼
+ 1. Container Parser ──► 8-byte signature check, chunk loop, CRC-32 validation
+       │                 (concatenates multiple IDAT chunks in stream order)
+       ▼
+ 2. zlib Wrapper     ──► CMF/FLG validation (RFC 1950), FDICT rejection
+       │
+       ▼
+ 3. DEFLATE Engine   ──► Bit-reader (LSB/MSB), Canonical Huffman trees,
+       │                 Stored / Fixed / Dynamic blocks, LZ77 sliding window (RFC 1951)
+       ▼
+ 4. Adler-32 Verify  ──► Modulo-65521 checksum verification against trailer
+       │
+       ▼
+ 5. Scanline Unfilter──► Reverses None, Sub, Up, Average, and Paeth predictors
+       │
+       ▼
+ 6. Terminal Engine  ──► Aspect-preserving downscale, alpha composite, ANSI emitter
+```
 
-**2. DEFLATE inflate** — [`src/inflate.c`](src/inflate.c)
+### 1. Chunk Parsing & CRC-32 (`src/png_container.c`)
+Reads the 8-byte PNG signature, validates critical vs ancillary chunks, extracts IHDR
+metadata, and validates per-chunk CRC-32 using a table-driven polynomial (`0xEDB88320`)
+implemented directly from PNG spec Annex D.
 
-The concatenated `IDAT` buffer is a zlib stream (RFC 1950) wrapping a DEFLATE
-bitstream (RFC 1951). After stripping the 2-byte zlib header and verifying the
-Adler-32 trailer, the inflater processes blocks sequentially. Three block types:
-`BTYPE=00` stored (literal copy), `BTYPE=01` fixed Huffman tables (hardcoded
-per spec), and `BTYPE=10` dynamic Huffman — where a second Huffman tree encoded
-in the block header describes the first one. This is the core complexity: the
-19-symbol code-length alphabet, repeat codes 16/17/18, and the canonical
-code-building algorithm that turns sorted bit-lengths into a decode table.
-Back-references (length/distance pairs) are resolved via a sliding window over
-the output buffer.
+### 2. RFC 1950 zlib Envelope & Adler-32 (`src/zlib_wrapper.c`)
+Strips the 2-byte header, checks `CM=8` and the mod-31 header check bits, and computes
+an independent Adler-32 checksum (two running 16-bit sums mod 65521) over the decompressed
+stream to ensure byte-for-byte integrity against encoder output.
 
-**3. Scanline unfiltering** — [`src/png_unfilter.c`](src/png_unfilter.c)
+### 3. Hand-Rolled RFC 1951 DEFLATE Engine (`src/inflate.c`, `src/huffman.c`, `src/bit_reader.c`)
+* **Bit Reader**: Consumes bytes LSB-first for DEFLATE fields and MSB-first for Huffman codes.
+* **Canonical Huffman**: Constructs decode tables from bit-lengths alone (no tree node pointers).
+  Validates prefix codes using Kraft inequality check and handles the 0/1-symbol edge case.
+* **Dynamic Huffman Blocks**: Decodes the 19-symbol code-length alphabet, expands lit/dist
+  lengths using repeat codes 16/17/18, and builds working trees on the fly.
+* **LZ77 Sliding Window**: Back-references index directly into the output buffer, handling
+  overlapping copies (distance < length) byte-by-byte without separate window buffers.
 
-The inflated bytes are not raw pixels. Each scanline is prefixed with a filter
-type byte (0–4), and the pixel bytes are delta-encoded. Reversing this requires
-the already-decoded previous row. Five filters: **None** (no transform),
-**Sub** (delta from left neighbor), **Up** (delta from pixel above), **Average**
-(floor of average of left and above), and **Paeth** — a predictor function that
-selects among left, above, and upper-left based on which is closest to a linear
-prediction. Row 0's "above" is a virtual all-zeros row. The output buffer holds
-reconstructed pixels; the `prev` pointer for row N+1 points directly into that
-buffer at row N's offset — no copy.
+### 4. Five Scanline Filter Predictors (`src/png_unfilter.c`)
+Reconstructs scanlines row-by-row for None (0), Sub (1), Up (2), Average (3), and Paeth (4).
+The previous row pointer indexes directly into already-unfiltered output memory (zero copy).
 
-**4. Terminal rendering** — [`src/term_render.c`](src/term_render.c)
-
-The pixel buffer is downscaled to terminal width (nearest-neighbor; quality is
-not the point) and rendered using ANSI escape sequences. In truecolor mode:
-`\x1b[38;2;R;G;Bm` sets foreground, `\x1b[48;2;R;G;Bm` sets background, and
-`▀` (U+2580, written as raw UTF-8 bytes `E2 96 80`) carries two image rows per
-cell. `\x1b[0m` resets at every line end to prevent color bleeding into the
-shell prompt. 256-color mode quantizes each pixel to the xterm-256 palette
-(6×6×6 RGB cube + 24-step grayscale ramp). ASCII mode maps BT.601 luminance to
-the ramp `" .:-=+*#%@"`.
+### 5. Terminal Rendering Engine (`src/term_render.c`)
+Downscales using fixed-point integer math with aspect-ratio preservation (`row_scale = 2 * scale_x`),
+composites alpha over background, and emits optimized ANSI truecolor, xterm-256, or ASCII output.
 
 ---
 
-## Scope
+## Architectural Advantages Over Traditional Decoders
 
-**Supported:** 8-bit RGB (color type 2) and RGBA (color type 6), no interlacing.
-This covers the overwhelming majority of real-world PNGs — JPEG-replacement
-photos, screenshots, UI assets, and anything exported by GIMP, Photoshop,
-Pillow, or libpng with default settings.
+1. **Zero External Linkage**: No runtime DLL/so mismatch, no pkg-config requirement, no version drift.
+2. **Single-File Embeddable**: `make single` outputs an amalgamated `build/imgview_single.c` ready to drop into any C/C++ project.
+3. **Small Footprint**: The entire decoder and viewer is ~1,700 lines of readable C code.
+4. **Memory Efficient**: The decompressed output buffer serves simultaneously as the LZ77 back-reference window and scanline filter history buffer.
 
-**Out of scope (rejected cleanly with an error message, never silently
-mishandled):** 16-bit depth, grayscale (types 0/4), palette/indexed color
-(type 3), Adam7 interlacing, APNG, encoding.
+---
 
-Interlacing in particular is additive complexity, not a core format primitive —
-the filters, inflate, and chunk parser work identically without it.
-The unsupported types are good candidates for a follow-on iteration.
+## Current Scope & Limitations (and How They Can Be Extended)
+
+### What is Supported Today
+* **8-bit RGB (Color Type 2)**: Standard 24-bit truecolor.
+* **8-bit RGBA (Color Type 6)**: 32-bit truecolor with alpha channel.
+* **Non-interlaced (Method 0)**: Sequential scanlines.
+
+This covers the overwhelming majority (>90%) of real-world PNGs produced by modern tools,
+cameras, screenshots, and web exports.
+
+### Current Limitations & Future Scope
+
+| Limitation | Why it was scoped out | How it can be extended (Future Scope) |
+|---|---|---|
+| **Palette / Indexed (Type 3)** | Kept decoder focused on 24/32-bit pixel paths. | The parser already recognizes `PLTE`. Extending it requires decoding indices and looking up RGB in the palette table during unfilter. |
+| **Grayscale (Types 0 & 4)** | Rare in modern terminal workflows. | Uses the exact same DEFLATE and unfilter logic with 1 or 2 bytes-per-pixel instead of 3 or 4. |
+| **Adam7 Interlacing** | 1990s progressive web feature; modern encoders disable it by default. | Adam7 decomposes an image into 7 reduced passes. The DEFLATE and filter core are identical; only the scanline reassembly loop changes. |
+| **16-bit Channel Depth** | Primarily scientific / medical imaging. | Extends byte reads to 16-bit big-endian words during unfilter. |
+| **Sixel / Kitty Graphics** | ASCII/half-block provides universal terminal fallback. | Add protocol-specific escape emitter in `term_render.c` for terminals supporting hardware bitmap blitting. |
+
+---
+
+## Zero Dependencies
+
+See [`STDLIB.md`](STDLIB.md) for the full substitution table. Summary:
+
+| Normally imported | Replaced by |
+|---|---|
+| `zlib` / `miniz` | Hand-rolled DEFLATE inflate from RFC 1951 |
+| `zlib` (RFC 1950 wrapper) | Hand-rolled CMF/FLG validation + Adler-32 |
+| `libpng` | Hand-rolled chunk parser + all 5 unfilter types |
+| `zlib` (`crc32()`) | Table-driven CRC-32 from PNG spec Annex D |
+| `chafa` / `libsixel` | Hand-rolled ANSI half-block renderer |
+
+The only non-stdlib header is POSIX `sys/ioctl.h` for terminal size, disclosed
+in `STDLIB.md`.
 
 ---
 
 ## Test Suite
- 
+
 ```
 45 unit tests across 6 test binaries:
-  test_primitives   — CRC-32, big-endian u32 reader
-  test_bitreader    — LSB-first bit extraction, alignment, atomicity
-  test_huffman      — canonical code build, decode, edge cases (0/1 symbol)
-  test_inflate      — stored, fixed Huffman, dynamic Huffman, LZ77 back-refs
-  test_zlib_wrapper — header parse, Adler-32 verify, error paths
-  test_unfilter     — all 5 filter types, Paeth predictor, mixed rows, bpp
+  test_primitives   : CRC-32, big-endian u32 reader
+  test_bitreader    : LSB-first bit extraction, alignment, atomicity
+  test_huffman      : canonical code build, decode, edge cases (0/1 symbol)
+  test_inflate      : stored, fixed Huffman, dynamic Huffman, LZ77 back-refs
+  test_zlib_wrapper : header parse, Adler-32 verify, error paths
+  test_unfilter     : all 5 filter types, Paeth predictor, mixed rows, bpp
 
 51 committed malformed-input test cases (tests/malformed/):
   truncation at key byte offsets, empty files, bad signatures,
   CRC flips on IHDR, integer overflow guards (width/height 0xFFFFFFFF),
   bad DEFLATE BTYPE, invalid zlib headers, corrupt trees, bad back-refs,
-  missing IEND — all exit 1, none crash or hang.
+  missing IEND (all exit 1, none crash or hang).
 
-Multi-layer Ground Truth Verification:
-  make verify-inflate — byte-for-byte match vs Python zlib.decompress()
-  make verify-pixels  — byte-for-byte full-buffer & alpha match vs Pillow
-  make verify-render  — ANSI sequence reconstruction & alpha compositing
-  make memcheck       — zero memory leaks across all valid and error paths
-  make analyze        — zero warnings under GCC -fanalyzer deep static analysis
-```
-
----
-
-## Project Structure
-
-```
-src/
-  png_container.c   chunk parser, CRC-32, IHDR validation
-  bit_reader.c      LSB-first bit extraction from a byte buffer
-  huffman.c         canonical Huffman table build + single-symbol decode
-  inflate.c         DEFLATE inflate: stored / fixed / dynamic blocks
-  zlib_wrapper.c    RFC 1950 header strip + Adler-32 verification
-  png_unfilter.c    PNG scanline unfiltering, all 5 filter types
-  term_render.c     terminal renderer: truecolor / 256-color / ASCII
-  main.c            CLI surface: argument parsing, pipeline orchestration
-
-include/            public headers (one per module)
-tests/              unit tests (one .c per binary, no test framework)
-tests/malformed/    51 committed adversarial/corrupt PNG test cases
-tools/
-  gen_corpus.py         generates diverse PNG fixtures for integration tests
-  gen_malformed_suite.py generates committed tests/malformed/ test cases
-  fuzz_malformed.py     51-case malformed-input test gauntlet
-  verify_inflate.py     Stage 2a inflate ground truth comparison vs zlib
-  verify_pixels.py      Stage 2b pixel buffer & alpha comparison vs Pillow
-  verify_render.py      Stage 2c ANSI parsing and downscaled/alpha verification
-  verify_memory.py      Stage 4 zero-leak memory verification harness
-  analyze_static.py     Stage 4 GCC -fanalyzer static analysis runner
-  bench_perf.py         Stage 5 latency and throughput benchmark
-  regression_check.py   Stage 6 master automated regression test harness
-  check_render_aspect.py  regression check: --width downscale preserves aspect ratio
-  render_screenshot.py    regenerates docs/screenshot.png from real program output
-demo/               five reference PNGs (32×32 to 2048×2048, RGB and RGBA)
-tests/fixtures/     generated corpus (make corpus)
-docs/screenshot.png real captured terminal output, embedded above
-PITCH.md            30-second spoken demo pitch, memorize-and-rehearse
-DEMO_REHEARSAL.md   demo rehearsal log: exact commands, fallback paths verified
+Multi-layer ground truth verification:
+  make verify-inflate : byte-for-byte match vs Python zlib.decompress()
+  make verify-pixels  : byte-for-byte full-buffer & alpha match vs Pillow
+  make verify-render  : ANSI sequence reconstruction & alpha compositing
+  make memcheck       : zero memory leaks across all valid and error paths
+  make analyze        : zero warnings under GCC -fanalyzer static analysis
 ```
 
 ---
 
 ## Performance
 
-All images decode well under 100ms wall time on a mid-range laptop:
+All images decode in well under 100ms on a mid-range laptop:
 
 | Image | Pixels | Decode + Unfilter |
 |-------|--------|------------------|
-| 32×32 RGB | 3 KB | < 1 ms |
-| 256×256 RGBA | 256 KB | 1 ms |
-| 640×480 RGB | 900 KB | 12 ms |
-| 2048×2048 RGB | 12 MB | 20 ms |
-| 2000×1500 RGBA | 12 MB | 20 ms |
+| 32x32 RGB | 3 KB | < 1 ms |
+| 256x256 RGBA | 256 KB | 1 ms |
+| 640x480 RGB | 900 KB | 12 ms |
+| 2048x2048 RGB | 12 MB | 20 ms |
+| 2000x1500 RGBA | 12 MB | 20 ms |
 
-The dominant cost is DEFLATE decode (dynamic Huffman symbol lookup per output
-byte). There are no unnecessary copies: the inflate output buffer is consumed
-directly by the unfilter step, which writes directly into the final pixel buffer.
+The dominant cost is DEFLATE decode (one Huffman symbol lookup per output byte).
+There are no unnecessary copies: the inflate output buffer is consumed directly
+by the unfilter step, which writes directly into the final pixel buffer.

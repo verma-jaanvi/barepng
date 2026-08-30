@@ -1,10 +1,4 @@
-/* png_container.c — Phase 1: PNG container parsing.
- *
- * Responsible for everything up to (but not including) decompression:
- * signature check, the length/type/data/crc chunk loop, IHDR validation
- * against SCOPE.md, and concatenation of IDAT payloads into one buffer
- * for Phase 2 to inflate. No zlib/DEFLATE logic lives here.
- */
+/* PNG container parser: signature check, chunk iteration, CRC validation. */
 #include "png_decoder.h"
 
 #include <errno.h>
@@ -17,10 +11,6 @@ static const uint8_t PNG_SIGNATURE[PNG_SIGNATURE_LEN] = {
     0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A
 };
 
-/* ---------------------------------------------------------------------
- * Big-endian primitive
- * ------------------------------------------------------------------- */
-
 uint32_t png_read_u32_be(const uint8_t *p) {
     return ((uint32_t)p[0] << 24) |
            ((uint32_t)p[1] << 16) |
@@ -28,13 +18,7 @@ uint32_t png_read_u32_be(const uint8_t *p) {
            ((uint32_t)p[3]);
 }
 
-/* ---------------------------------------------------------------------
- * CRC-32 (PNG/zlib variant: poly 0xEDB88320, reflected, init/final xor
- * 0xFFFFFFFF). Table-driven, built once, lazily. This is the standard
- * public algorithm re-derived here, not copied from any implementation —
- * the point of a zero-dependency project is that this is *ours*.
- * ------------------------------------------------------------------- */
-
+/* CRC-32 (PNG spec Annex D: polynomial 0xEDB88320, reflected) */
 static uint32_t crc_table[256];
 static int crc_table_ready = 0;
 
@@ -62,10 +46,7 @@ uint32_t png_crc32(const uint8_t *data, size_t len) {
     return c ^ 0xFFFFFFFFu;
 }
 
-/* ---------------------------------------------------------------------
- * IDAT accumulation buffer (doubling growth, like a poor man's vector)
- * ------------------------------------------------------------------- */
-
+/* Append bytes to growing IDAT buffer */
 static int idat_append(png_container_t *c, const uint8_t *data, size_t len) {
     if (len == 0) return 0;
 
@@ -82,25 +63,14 @@ static int idat_append(png_container_t *c, const uint8_t *data, size_t len) {
     return 0;
 }
 
-/* ---------------------------------------------------------------------
- * Chunk type helpers
- * ------------------------------------------------------------------- */
-
 static int type_is(const uint8_t *type, const char *literal) {
     return memcmp(type, literal, 4) == 0;
 }
 
-/* Per the PNG spec, chunk type bytes encode "critical vs ancillary" in
- * bit 5 (0x20) of the first byte: clear = critical (uppercase), set =
- * ancillary (lowercase). A decoder may safely skip an unrecognized
- * ancillary chunk; it must not silently skip an unrecognized critical
- * one. */
 static int type_is_critical(const uint8_t *type) {
     return (type[0] & 0x20) == 0;
 }
 
-/* Chunk type bytes are attacker/corruption-controlled input — never trust
- * them to be printable ASCII before putting them in an error message. */
 static char safe_char(uint8_t c) {
     return (c >= 0x20 && c < 0x7F) ? (char)c : '?';
 }
@@ -112,10 +82,6 @@ static void set_err(char *errbuf, size_t errbuf_len, const char *fmt, ...) {
     vsnprintf(errbuf, errbuf_len, fmt, ap);
     va_end(ap);
 }
-
-/* ---------------------------------------------------------------------
- * Main entry point
- * ------------------------------------------------------------------- */
 
 png_status_t png_read_container(const char *path, png_container_t *out,
                                  char *errbuf, size_t errbuf_len) {
@@ -180,7 +146,6 @@ png_status_t png_read_container(const char *path, png_container_t *out,
         uint32_t length = png_read_u32_be(buf + cursor);
         const uint8_t *type = buf + cursor + 4;
 
-        /* type(4) + data(length) + crc(4) must all fit */
         if (cursor + 8 + (size_t)length + 4 > file_size) {
             set_err(errbuf, errbuf_len,
                     "truncated file: chunk claims %u data bytes but file ends first",
@@ -191,7 +156,6 @@ png_status_t png_read_container(const char *path, png_container_t *out,
         const uint8_t *data = buf + cursor + 8;
         uint32_t crc_stored = png_read_u32_be(data + length);
 
-        /* CRC covers type + data, not the length field */
         uint32_t crc_computed = png_crc32(type, 4 + (size_t)length);
         if (crc_computed != crc_stored) {
             set_err(errbuf, errbuf_len,
@@ -270,8 +234,7 @@ png_status_t png_read_container(const char *path, png_container_t *out,
             }
             if (c.ihdr.interlace_method != 0) {
                 set_err(errbuf, errbuf_len,
-                        "unsupported: interlaced PNGs are not supported "
-                        "(Adam7 is out of scope)");
+                        "unsupported: interlaced PNGs are not supported");
                 status = PNG_ERR_UNSUPPORTED_INTERLACE;
                 break;
             }
@@ -289,11 +252,9 @@ png_status_t png_read_container(const char *path, png_container_t *out,
         } else if (type_is(type, "IEND")) {
             have_iend = 1;
             cursor += 8 + (size_t)length + 4;
-            break; /* nothing meaningful can follow IEND */
+            break;
         } else if (type_is(type, "PLTE")) {
-            /* PLTE is allowed as a *suggested* palette alongside truecolor
-             * data (color type 2/6); since we always render from the
-             * RGB(A) samples directly, we don't need its contents. */
+            /* Suggested palette in truecolor image; ignore contents */
         } else if (type_is_critical(type)) {
             set_err(errbuf, errbuf_len,
                     "unsupported: unrecognized critical chunk '%c%c%c%c'",
@@ -302,8 +263,6 @@ png_status_t png_read_container(const char *path, png_container_t *out,
             status = PNG_ERR_UNSUPPORTED_CRITICAL_CHUNK;
             break;
         }
-        /* else: unrecognized ancillary chunk (tEXt, gAMA, sRGB, ...) —
-         * safe to skip per spec. */
 
         cursor += 8 + (size_t)length + 4;
     }

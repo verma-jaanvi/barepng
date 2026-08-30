@@ -1,9 +1,9 @@
-/* test_inflate.c — end-to-end inflate() tests for Phase 2b (stored
+/* test_inflate.c - end-to-end inflate() tests for Phase 2b (stored
  * blocks) and Phase 2c (fixed Huffman + LZ77 backreferences).
  *
  * All DEFLATE fixtures below were generated externally with Python's
  * zlib module (raw deflate, negative wbits, no zlib wrapper) and their
- * expected decompressed output recorded at generation time — per the
+ * expected decompressed output recorded at generation time - per the
  * plan, zlib is a fixture-generation tool for this test file only and
  * is never linked into the decoder binary (see Makefile: this test
  * links only inflate.o/huffman.o/bit_reader.o).
@@ -14,7 +14,7 @@
 #include "inflate.h"
 
 /* Fixtures generated externally via Python zlib (compressobj with
- * negative wbits for raw DEFLATE, no zlib wrapper) — zlib only
+ * negative wbits for raw DEFLATE, no zlib wrapper) - zlib only
  * *generates* these fixtures at development time; it is never linked
  * into the decoder binary itself. Each fixture's round-trip against
  * zlib.decompress was verified at generation time. */
@@ -105,7 +105,7 @@ static void test_fixed_huffman_block(void) {
 
 /* 300 repeated 'a' bytes compresses (at level 6) to just a handful of
  * bytes almost entirely via length-258 backrefs (LZ77's maximum single
- * match length, length code 285, which carries 0 extra bits) — this
+ * match length, length code 285, which carries 0 extra bits) - this
  * specifically exercises the top edge of the length table and the
  * "backref length can exceed backref distance" (distance=1 here) path,
  * which requires the byte-by-byte overlap-safe copy rather than memcpy. */
@@ -244,7 +244,7 @@ static void test_dynamic_huffman_block(void) {
 }
 
 /* BFINAL=1, BTYPE=10, but the stream is cut off immediately after the
- * BTYPE bits — before even HLIT/HDIST/HCLEN can be read. Must fail
+ * BTYPE bits - before even HLIT/HDIST/HCLEN can be read. Must fail
  * cleanly with INFLATE_ERR_TRUNCATED, not read past the buffer. */
 static void test_dynamic_huffman_truncated_header(void) {
     uint8_t buf[1] = {0x05}; /* BFINAL=1, BTYPE=10, then nothing */

@@ -74,7 +74,7 @@ W, H = 64, 64
 
 files_created = []
 
-# 1. Solid-color blocks — different compression levels
+# 1. Solid-color blocks - different compression levels
 for level, label in [(0, 'stored'), (1, 'fast'), (6, 'default'), (9, 'best')]:
     pixels = [(200, 100, 50)] * (W * H)
     path = f'{output_dir}/solid_rgb_compress{level}.png'
@@ -83,7 +83,7 @@ for level, label in [(0, 'stored'), (1, 'fast'), (6, 'default'), (9, 'best')]:
     files_created.append(path)
     print(f'  {path}  ({os.path.getsize(path)} bytes)')
 
-# 2. Gradient — sweeps all 256 levels across R, G, B channels
+# 2. Gradient - sweeps all 256 levels across R, G, B channels
 # High entropy → dynamic Huffman, exercises LZ77 across scanlines
 pixels = []
 for y in range(H):
@@ -98,7 +98,7 @@ with open(path, 'wb') as f:
 files_created.append(path)
 print(f'  {path}  ({os.path.getsize(path)} bytes)')
 
-# 3. RGBA with full alpha gradient — exercises alpha compositing path
+# 3. RGBA with full alpha gradient - exercises alpha compositing path
 pixels_rgba = []
 for y in range(H):
     for x in range(W):
@@ -113,7 +113,7 @@ with open(path, 'wb') as f:
 files_created.append(path)
 print(f'  {path}  ({os.path.getsize(path)} bytes)')
 
-# 4. Random noise — worst case for compression (no repeated patterns)
+# 4. Random noise - worst case for compression (no repeated patterns)
 # Forces encoder to use many stored/literal blocks
 random.seed(42)
 pixels = [(random.randint(0,255), random.randint(0,255), random.randint(0,255))
@@ -135,7 +135,7 @@ with open(path, 'wb') as f:
 files_created.append(path)
 print(f'  {path}  ({os.path.getsize(path)} bytes, multi-IDAT)')
 
-# 6. Large image: 512x512 gradient — performance baseline
+# 6. Large image: 512x512 gradient - performance baseline
 W2, H2 = 512, 512
 pixels = []
 for y in range(H2):
@@ -159,7 +159,7 @@ for path in files_created:
         im.load()
         print(f'  {path}: OK ({im.size[0]}x{im.size[1]} {im.mode})')
     except Exception as e:
-        print(f'  {path}: FAIL — {e}')
+        print(f'  {path}: FAIL - {e}')
         all_ok = False
 
 print(f'\n{"All files valid" if all_ok else "SOME FILES FAILED"}')

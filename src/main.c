@@ -1,35 +1,14 @@
-/* main.c — Phase 5: CLI surface.
- *
- * Usage:
- *   imgview <file.png> [options]
- *
- * Options:
- *   --width N              cap render width to N columns (default: terminal width)
- *   --mode=truecolor|256|ascii  override color mode auto-detection
- *   --info                 print file/decode stats only, skip render
- *   --help                 print usage and exit 0
- *
- * Exit codes:
- *   0  success (render completed or --info printed)
- *   1  any error (file not found, bad PNG, bad CRC, unsupported format, ...)
- *
- * All error messages go to stderr; stdout carries only the render output
- * (and info lines in --info mode) so piped usage works cleanly.
- */
+/* CLI surface: argument parsing, decoding pipeline, and terminal output. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>   /* clock() for decode timing */
+#include <time.h>
 
 #include "png_decoder.h"
 #include "zlib_wrapper.h"
 #include "inflate.h"
 #include "png_unfilter.h"
 #include "term_render.h"
-
-/* -----------------------------------------------------------------------
- * Human-readable helpers
- * --------------------------------------------------------------------- */
 
 static const char *color_type_name(uint8_t ct) {
     switch (ct) {
@@ -47,7 +26,6 @@ static int channels_for_color_type(uint8_t ct) {
     }
 }
 
-/* Format a byte count as "X.Y MB" or "X KB" for the --info line. */
 static void fmt_bytes(char *buf, size_t bufsz, size_t n) {
     if (n >= 1024 * 1024) {
         snprintf(buf, bufsz, "%.1f MB", (double)n / (1024.0 * 1024.0));
@@ -58,18 +36,13 @@ static void fmt_bytes(char *buf, size_t bufsz, size_t n) {
     }
 }
 
-/* -----------------------------------------------------------------------
- * --help
- * --------------------------------------------------------------------- */
-
 static void print_help(const char *prog) {
     printf("Usage: %s <file.png> [options]\n", prog);
     printf("\n");
     printf("Decode and render a PNG file in the terminal.\n");
     printf("\n");
     printf("Options:\n");
-    printf("  --width N              cap render width to N columns\n");
-    printf("                         (default: terminal width)\n");
+    printf("  --width N              cap render width to N columns (default: terminal width)\n");
     printf("  --mode=truecolor       force 24-bit truecolor output\n");
     printf("  --mode=256             force xterm-256 color output\n");
     printf("  --mode=ascii           force ASCII luminance ramp output\n");
@@ -77,26 +50,19 @@ static void print_help(const char *prog) {
     printf("  --help                 print this help and exit\n");
     printf("\n");
     printf("Supported PNG types: 8-bit RGB (color type 2) and RGBA (color type 6).\n");
-    printf("Unsupported files (palette, grayscale, 16-bit, interlaced) exit with\n");
-    printf("an explicit error message — never a crash.\n");
 }
 
-/* -----------------------------------------------------------------------
- * Argument parsing
- * --------------------------------------------------------------------- */
-
 typedef struct {
-    const char *filename;     /* required positional arg */
-    const char *dump_inflate; /* --dump-inflate <outfile> */
-    const char *dump_pixels;  /* --dump-pixels <outfile> */
-    int         info_only;    /* --info */
-    int         width;        /* --width N, 0 = auto */
-    int         mode_set;     /* 1 if --mode= was given */
+    const char *filename;
+    const char *dump_inflate;
+    const char *dump_pixels;
+    int         info_only;
+    int         width;
+    int         mode_set;
     term_mode_t mode;
     int         help;
 } cli_args_t;
 
-/* Returns 0 on success, -1 on parse error (message already printed). */
 static int parse_args(int argc, char **argv, cli_args_t *out) {
     memset(out, 0, sizeof(*out));
     const char *prog = argv[0];
@@ -158,14 +124,12 @@ static int parse_args(int argc, char **argv, cli_args_t *out) {
             continue;
         }
 
-        /* Anything starting with '--' that we didn't recognise is an error. */
         if (a[0] == '-' && a[1] == '-') {
             fprintf(stderr, "%s: unknown option '%s'\n", prog, a);
             fprintf(stderr, "Run '%s --help' for usage.\n", prog);
             return -1;
         }
 
-        /* First non-option arg is the filename. */
         if (!out->filename) {
             out->filename = a;
         } else {
@@ -177,14 +141,9 @@ static int parse_args(int argc, char **argv, cli_args_t *out) {
     return 0;
 }
 
-/* -----------------------------------------------------------------------
- * Main
- * --------------------------------------------------------------------- */
-
 int main(int argc, char **argv) {
     const char *prog = argv[0];
 
-    /* --- parse args --- */
     cli_args_t args;
     if (parse_args(argc, argv, &args) != 0) {
         return 1;
@@ -199,29 +158,22 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    /* --- auto-detect terminal, then apply any overrides --- */
     term_render_opts_t opts = term_render_detect();
     if (args.mode_set)  opts.mode     = args.mode;
     if (args.width > 0) opts.max_cols = args.width;
 
-    /* ----------------------------------------------------------------
-     * Phase 1: parse PNG container
-     * ---------------------------------------------------------------- */
+    /* 1. Parse container */
     png_container_t container;
     char err[256];
     png_status_t pstatus = png_read_container(args.filename, &container, err, sizeof(err));
     if (pstatus != PNG_OK) {
-        /* All error messages are already human-readable from png_container.c.
-         * Re-emit on stderr with the program name prefix. */
         fprintf(stderr, "%s: %s\n", prog, err);
         return 1;
     }
 
     int channels = channels_for_color_type(container.ihdr.color_type);
 
-    /* ----------------------------------------------------------------
-     * Phase 2: inflate (timed for --info's performance claim)
-     * ---------------------------------------------------------------- */
+    /* 2. Strip zlib envelope and inflate */
     const uint8_t *deflate_data;
     size_t deflate_len;
     zlib_wrapper_status_t zstatus = zlib_wrapper_strip(
@@ -247,35 +199,36 @@ int main(int argc, char **argv) {
     clock_t t1 = clock();
     double inflate_ms = (double)(t1 - t0) * 1000.0 / CLOCKS_PER_SEC;
 
-    /* Adler-32 verification (integrity check — fail loudly if bad) */
+    /* Verify Adler-32 checksum */
     zstatus = zlib_wrapper_check_adler32(container.idat_data, container.idat_size,
                                           inflated.data, inflated.size);
     if (zstatus != ZLIB_WRAPPER_OK) {
-        fprintf(stderr, "%s: %s: Adler-32 mismatch — data may be corrupt\n",
+        fprintf(stderr, "%s: %s: Adler-32 mismatch - data may be corrupt\n",
                 prog, args.filename);
         inflate_buffer_free(&inflated);
         png_container_free(&container);
         return 1;
     }
 
-    size_t stride = 0;
-    if (__builtin_mul_overflow((size_t)container.ihdr.width, (size_t)channels, &stride) ||
-        stride > (size_t)-2) {
+    /* Verify uncompressed size */
+    if ((size_t)channels == 0 ||
+        (size_t)container.ihdr.width > SIZE_MAX / (size_t)channels) {
         fprintf(stderr, "%s: %s: image dimensions too large (overflow)\n",
                 prog, args.filename);
         inflate_buffer_free(&inflated);
         png_container_free(&container);
         return 1;
     }
+    size_t stride = (size_t)container.ihdr.width * (size_t)channels;
     size_t scanline_len = stride + 1;
-    size_t expected_size = 0;
-    if (__builtin_mul_overflow((size_t)container.ihdr.height, scanline_len, &expected_size)) {
+    if ((size_t)container.ihdr.height > SIZE_MAX / scanline_len) {
         fprintf(stderr, "%s: %s: image dimensions too large (overflow)\n",
                 prog, args.filename);
         inflate_buffer_free(&inflated);
         png_container_free(&container);
         return 1;
     }
+    size_t expected_size = (size_t)container.ihdr.height * scanline_len;
     if (inflated.size != expected_size) {
         fprintf(stderr, "%s: %s: inflated size %zu does not match expected %zu\n",
                 prog, args.filename, inflated.size, expected_size);
@@ -304,9 +257,7 @@ int main(int argc, char **argv) {
         fclose(f);
     }
 
-    /* ----------------------------------------------------------------
-     * Phase 3: unfilter
-     * ---------------------------------------------------------------- */
+    /* 3. Unfilter scanlines */
     png_pixels_t pixels;
     png_unfilter_status_t ustatus = png_unfilter(
         inflated.data, inflated.size,
@@ -343,9 +294,7 @@ int main(int argc, char **argv) {
         fclose(f);
     }
 
-    /* ----------------------------------------------------------------
-     * --info output (always printed, render skipped when --info given)
-     * ---------------------------------------------------------------- */
+    /* 4. Display info / stats */
     char idat_fmt[32], pixel_fmt[32];
     fmt_bytes(idat_fmt, sizeof(idat_fmt), container.idat_size);
     fmt_bytes(pixel_fmt, sizeof(pixel_fmt), (size_t)pixels.width * pixels.height *
@@ -370,9 +319,7 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    /* ----------------------------------------------------------------
-     * Phase 4: render
-     * ---------------------------------------------------------------- */
+    /* 5. Render */
     printf("\n");
     term_render(&pixels, &opts);
 

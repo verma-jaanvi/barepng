@@ -4,13 +4,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* PNG signature per spec: 89 50 4E 47 0D 0A 1A 0A */
 #define PNG_SIGNATURE_LEN 8
 
-/* Color types we accept — locked in SCOPE.md.
- * (Values match the PNG spec's IHDR color type byte; other spec values
- * exist — 0 grayscale, 3 palette, 4 grayscale+alpha — but are out of scope
- * and rejected at parse time.) */
+/* Supported PNG color types (RFC 2083 / ISO 15948) */
 #define PNG_COLOR_TYPE_RGB  2
 #define PNG_COLOR_TYPE_RGBA 6
 
@@ -36,7 +32,7 @@ typedef enum {
     PNG_ERR_OUT_OF_MEMORY
 } png_status_t;
 
-/* Parsed IHDR fields, straight off the wire (big-endian already decoded). */
+/* Parsed IHDR header */
 typedef struct {
     uint32_t width;
     uint32_t height;
@@ -47,40 +43,26 @@ typedef struct {
     uint8_t  interlace_method;
 } png_ihdr_t;
 
-/* Result of Phase 1: header fields + the concatenated, CRC-verified IDAT
- * payload, ready to hand to the Phase 2 inflate decoder. Nothing in here
- * is decompressed yet. */
+/* Container structure holding parsed header and concatenated IDAT data */
 typedef struct {
     png_ihdr_t ihdr;
-    uint8_t   *idat_data;     /* concatenation of every IDAT chunk's payload */
+    uint8_t   *idat_data;     /* Concatenated IDAT payloads */
     size_t     idat_size;
-    size_t     idat_capacity; /* internal, for growth bookkeeping */
-    uint32_t   chunk_count;   /* total chunks read, informational */
+    size_t     idat_capacity;
+    uint32_t   chunk_count;
 } png_container_t;
 
-/* Reads and validates the container structure of a PNG file:
- *   - 8-byte signature
- *   - chunk loop (length/type/data/crc), with CRC-32 verification per chunk
- *   - IHDR parsed and validated against SCOPE.md (8-bit, color type 2/6,
- *     compression 0, filter 0, interlace 0)
- *   - all IDAT payloads concatenated in file order
- *   - IEND presence confirmed
- *
- * On PNG_OK, *out is fully populated and must be freed with
- * png_container_free(). On any other status, *out is left zeroed and
- * *errbuf (if non-NULL) contains a human-readable reason suitable for
- * printing directly to stderr.
- */
+/* Parse PNG container, validate chunks, and assemble IDAT stream */
 png_status_t png_read_container(const char *path, png_container_t *out,
                                  char *errbuf, size_t errbuf_len);
 
+/* Release memory allocated for IDAT stream */
 void png_container_free(png_container_t *c);
 
-/* Big-endian 4-byte reader, exposed for unit testing in isolation. */
+/* Read 32-bit big-endian unsigned integer */
 uint32_t png_read_u32_be(const uint8_t *p);
 
-/* Standard PNG/zlib CRC-32 (not zlib's crc32(); implemented from the
- * reference algorithm in the PNG spec, Annex D). Exposed for testing. */
+/* Table-driven CRC-32 (PNG spec Annex D) */
 uint32_t png_crc32(const uint8_t *data, size_t len);
 
 #endif /* PNG_DECODER_H */

@@ -3,7 +3,7 @@
 Generate the demo/ test PNG set.
 
 All images are forced to 8-bit depth, non-interlaced, and either
-truecolor (RGB) or truecolor+alpha (RGBA) — matching the locked scope
+truecolor (RGB) or truecolor+alpha (RGBA) - matching the locked scope
 in SCOPE.md. Pillow's default PNG writer already does 8-bit/no-interlace
 for these modes, but we double check after writing.
 """
@@ -49,7 +49,7 @@ for y in range(32):
         px[x, y] = (x * 8 % 256, y * 8 % 256, (x + y) * 4 % 256)
 save_png(icon, "icon_32x32_rgb.png")
 
-# 2) "photo" style, RGB — smooth gradient + noise to mimic photographic entropy
+# 2) "photo" style, RGB - smooth gradient + noise to mimic photographic entropy
 photo = Image.new("RGB", (640, 480))
 px = photo.load()
 for y in range(480):
@@ -65,7 +65,7 @@ for y in range(480):
         )
 save_png(photo, "photo_640x480_rgb.png")
 
-# 3) alpha channel, RGBA — soft circular gradient fading to transparent
+# 3) alpha channel, RGBA - soft circular gradient fading to transparent
 alpha = Image.new("RGBA", (256, 256))
 px = alpha.load()
 cx, cy = 128, 128

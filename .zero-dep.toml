@@ -1,0 +1,9 @@
+[project]
+name = "imgview"
+track = "Open"
+pitch = "Zero-dependency PNG decoder and truecolor terminal renderer in pure C, featuring hand-rolled DEFLATE (RFC 1951), CRC-32, Adler-32, and all five scanline filter predictors."
+language = "C"
+standard = "C11"
+build_command = "make all"
+test_command = "make check"
+single_file_command = "make single"

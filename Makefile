@@ -6,13 +6,20 @@ SRC      := $(wildcard src/*.c)
 OBJ      := $(patsubst src/%.c,$(BUILD)/%.o,$(SRC))
 
 ifeq ($(OS),Windows_NT)
-    # Full path to Python — avoids picking up MSYS2's stub which lacks PIL
-    PYTHON   := C:/Users/JAANVI/AppData/Local/Programs/Python/Python311/python.exe
+    # Prefer the full Python path to avoid MSYS2's stub (which lacks PIL).
+    # Falls back to bare 'python' so this Makefile works on any Windows machine.
+    _PYTHON_FULL := C:/Users/JAANVI/AppData/Local/Programs/Python/Python311/python.exe
+    ifeq ($(wildcard $(_PYTHON_FULL)),$(_PYTHON_FULL))
+        PYTHON := $(_PYTHON_FULL)
+    else
+        PYTHON := python
+    endif
     BIN      := $(BUILD)/pngdecoder.exe
     HEXDUMP  := tools/hexdump.exe
     MKDIR_P  := powershell -Command "if (!(Test-Path $(BUILD))) { New-Item -ItemType Directory -Path $(BUILD) | Out-Null }"
     RM_RF    := powershell -Command "if (Test-Path $(BUILD)) { Remove-Item -Recurse -Force $(BUILD) }; if (Test-Path $(HEXDUMP)) { Remove-Item -Force $(HEXDUMP) }"
-    TEST_RUN := powershell -Command "Get-ChildItem demo/*.png | ForEach-Object { Write-Host ('--- ' + $$_.Name + ' ---'); .\$(BIN) $$_.FullName }"
+    TEST_RUN := powershell -Command "Get-ChildItem demo/*.png | ForEach-Object { Write-Host ('--- ' + $$_.Name + ' ---'); .\\$(BIN) $$_.FullName }"
+    SINGLE_BIN := $(BUILD)/imgview_single.exe
 else
     BIN      := $(BUILD)/pngdecoder
     HEXDUMP  := tools/hexdump
@@ -20,6 +27,7 @@ else
     RM_RF    := rm -rf $(BUILD) $(HEXDUMP)
     TEST_RUN := for f in demo/*.png; do echo "--- $$f ---"; ./$(BIN) $$f; done
     PYTHON   := python3
+    SINGLE_BIN := $(BUILD)/imgview_single
 endif
 
 TESTBIN := $(BUILD)/test_primitives
@@ -39,7 +47,7 @@ ifeq ($(OS),Windows_NT)
     MEMCHECKBIN     := $(BUILD)/test_memcheck.exe
 endif
 
-.PHONY: all clean hexdump test check corpus fuzz analyze debug perf verify-inflate verify-pixels verify-render memcheck bench regression
+.PHONY: all clean hexdump test check corpus fuzz analyze debug perf repro verify-inflate verify-pixels verify-render memcheck bench regression single
 
 all: $(BIN) $(HEXDUMP)
 
@@ -51,8 +59,16 @@ debug: $(BIN)
 perf: CFLAGS += -O3 -DNDEBUG
 perf: $(BIN)
 
+# Reproducible build variant — pins flags that can introduce non-determinism.
+# -frandom-seed=0: makes GCC's symbol-name generation deterministic (GCC only).
+# -fdebug-prefix-map=.: strips absolute build paths from debug info.
+# Run tools/verify_reproducible.sh to confirm byte-identical output.
+REPRO_CFLAGS := $(CFLAGS) -frandom-seed=0 -fdebug-prefix-map=$(CURDIR)=.
+repro: $(OBJ) | $(BUILD)
+	$(CC) $(REPRO_CFLAGS) $(OBJ) -o $(BIN) $(LDFLAGS)
+
 $(BIN): $(OBJ) | $(BUILD)
-	$(CC) $(OBJ) -o $@ $(LDFLAGS)
+	$(CC) $(CFLAGS) $(OBJ) -o $@ $(LDFLAGS)
 
 $(BUILD)/%.o: src/%.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -142,6 +158,13 @@ analyze:
 # Stage 6: master regression test harness across all stages
 regression:
 	$(PYTHON) tools/regression_check.py
+
+# Single-file amalgamation build — all sources concatenated into one TU.
+# Alongside (not replacing) the normal modular build.
+# See tools/amalgamate.py for how the merge is done.
+single: $(BUILD)
+	$(PYTHON) tools/amalgamate.py > $(BUILD)/imgview_single.c
+	$(CC) $(CFLAGS) $(BUILD)/imgview_single.c -o $(SINGLE_BIN)
 
 clean:
 	@$(RM_RF)
