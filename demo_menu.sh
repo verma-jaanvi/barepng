@@ -45,7 +45,7 @@ select f in "$DEMO_DIR"/*.png "Show --info output" "Exit"; do
     *)
       if [ -n "${f:-}" ]; then
         echo
-        $TIMEOUT_CMD "$BIN" "$f" --width 90 || echo "(decode failed — see exit code)"
+        $TIMEOUT_CMD "$BIN" "$f" --width 90 --mode=truecolor || echo "(decode failed — see exit code)"
       else
         echo "Invalid selection."
       fi
