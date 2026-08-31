@@ -29,4 +29,4 @@ RUN chmod +x /app/demo_menu.sh /app/build/pngdecoder && chown -R demo:demo /app
 
 USER demo
 EXPOSE 7681
-CMD ["ttyd", "-p", "7681", "bash", "/app/demo_menu.sh"]
+CMD ["ttyd", "-W", "-p", "7681", "bash", "/app/demo_menu.sh"]
